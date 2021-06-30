@@ -1,0 +1,61 @@
+set verbose off
+clear
+
+include "./src/gregory_hansen.inp" --force
+open "./src/joe96_data.gdt" --quiet
+
+
+function scalar assert_matrix_equality (matrix actual, matrix expected)
+    /* Assert element-wise equality.
+    return: int, summed differences; zero value implies "any"-equality  */
+
+    d = abs(vec(actual)) .- abs(vec(expected))
+
+    return sum(d)
+end function
+
+
+function void test_baseline_estimation (const list L)
+    print "Start testing function name()"
+
+    # Given
+    smpl 1960:1 1990:4                  # Sample selected in the original article
+    matrix y = { L.md }                 # Endogeneous
+    matrix x = { L.ynr } ~ { L.sr }     # Exogenous
+
+    scalar type_break = 4        # Select break-type: 2=C, 3=C/T, 4=C/S
+    scalar choice = 2       # only for ADF*-test relevant
+    scalar k = 6            # maximum lag for ADF test
+
+    # When
+    bundle model = estimateGH(y, x, type_break, choice, k)
+    model
+
+
+    expected_lag_adf = 4
+    expected_tstat_adf = -4.77755
+    expected_breakpoint_pct_adf = 0.66129
+    expected_breakpoint_pct_za = 0.693548
+    expected_breakpoint_pct_zt = 0.693548
+    expected_tstat_za = -31.5576
+    expected_tstat_zt = -4.18042
+    expected_critvalues_adf = {-5.97, -5.73, -5.5, -5.23}
+    expected_critvalues_zt = {-68.210, -63.280, -58.330, -52.850}
+
+    # Then
+    assert(model.lag_adf == expected_lag_adf)
+    assert(model.tstat_adf == expected_tstat_adf)
+    assert(model.tstat_zt == expected_tstat_zt)
+    assert(model.tstat_za == expected_tstat_za)
+    assert(model.breakpoint_pct_adf == expected_breakpoint_pct_adf)
+    assert(model.breakpoint_pct_za == expected_breakpoint_pct_za)
+    assert(model.breakpoint_pct_zt == expected_breakpoint_pct_zt)
+
+    assert( assert_matrix_equality(model.critvalues_adf, expected_critvalues_adf) == 0)
+    assert( assert_matrix_equality(model.critvalues_zt, expected_critvalues_zt) == 0)
+end function
+test_baseline_estimation(dataset)
+
+
+printf "\nInfo: All tests passed.\n"
+quit

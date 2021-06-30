@@ -1,0 +1,27 @@
+clear
+set verbose off
+include gregory_hansen.gfn
+
+open joe96_data.gdt --frompkg=gregory_hansen
+
+smpl 1960:1 1990:4      # Sample selected in the original article
+
+matrix y = { md }   # Endogeneous
+matrix x = { ynr } ~ { sr } # Exogenous
+
+# Model parameters
+scalar model = 2
+scalar choice = 2
+scalar k = 6
+
+# Estimation
+eval $nobs
+eval $t1 ~ $t2
+Model = estimateGH(y, x, model, choice, k)
+
+# Plot regime shift
+plotGH(Model)
+
+# Engle-Granger test on cointegration
+coint k md ynr sr --test-down --skip-df
+coint k md ynr sr --ct --test-down --skip-df

@@ -1,0 +1,86 @@
+Package for testing for cointegration with regime-shifts using a single-equation
+model.
+
+Reference:
+Allan W. Gregory and Bruce E. Hansen (1996):"Residual-based tests for
+cointegration in models with regime shifts", Journal of Econometrics
+URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
+
+
+
+estimateGH(const matrix y, const matrix x, int model[1::], int choice[1::], int k[1::])
+==================================================================================
+Main public function for estimating the model. Returns a bundle with various
+information.
+
+Parameters:
+-----------
+y          - matrix, T by 1 vector of dependent variable
+x          - matrix, T by k matrix with independent variables
+model      - int, Choice for model:
+             = 2: break in intercept
+             = 3: break in intercept and linear trend
+             = 4: break in intercept and slope coefficients
+choice     - int, Information criteria for ADF lag-selection:
+             = 1: pre-specified AR lag
+             = 2: AIC-chosen AR lag
+             = 3: BIC-chosen AR lag
+             = 4: Downward-t-chosen AR lag
+k          - int, maximum lag for ADF test
+
+Return:
+--------
+bundle, including various estimation results:
+
+obs_ids            : Vector of observation IDs used for testing over the trimmed
+                     sample
+
+lag_adf            : Determined lag length of the ADF* test
+
+tstatistics_adf    : Vector of estimated ADF* test stats over the trimmed sample
+tstatistics_za     : Vector of estimated Za test stats over the trimmed sample
+tstatistics_zt     : Vector of estimated Zt test stats over the trimmed sample
+
+tstat_adf          : minimal ADF* test statistics
+tstat_za           : minimal Za test statistics
+tstat_zt           : minimal Zt test statistics
+
+breakpoint_obsnum_adf : Index number of breakpoint of ADF* test
+breakpoint_obsnum_za : Index number of breakpoint of Za test
+breakpoint_obsnum_zt : Index number of breakpoint of Zt test
+
+breakpoint_obslabel_adf : Date of break of ADF* test
+breakpoint_obslabel_za : Date of break of breakpoint of Za test
+breakpoint_obslabel_zt : Date of break of breakpoint of Zt test
+
+
+plotGH(const bundle self, string filename[null])
+==================================================================================
+Plot estimated test statistics for each sample considered.
+
+Parameters:
+-----------
+self       - bundle, Bundle returned by estimateGH()
+filename   - string, Full path and filename for storing plot (default: plot
+             appears immediately at screen)
+
+Return:
+--------
+Nothing.
+
+
+# CHANGELOG
+-----------
+1.0 (June 2021)
+   - rename public function from main() to estimateGH()
+   - add new public function for plotting breakpoints, plotGH()
+   - improved naming of returned variables
+   - updated help text
+   - internal refactoring
+
+0.61 (May 2017)
+   - load data for sample script directly from package
+
+0.6 (Nov. 2014)
+   - minor changes
+   - changed example using original data used by Gregory and Hansen
