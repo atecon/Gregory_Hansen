@@ -16,20 +16,20 @@ end function
 
 
 bundles Params = null
-Params = Params + _(model = 2, choice = 1, adf_maxlag = 2)
-Params = Params + _(model = 2, choice = 2, adf_maxlag = 2)
-Params = Params + _(model = 2, choice = 3, adf_maxlag = 2)
-Params = Params + _(model = 2, choice = 4, adf_maxlag = 2)
+Params = Params + _(model = 2, criteria = 1, adf_maxlag = 2)
+Params = Params + _(model = 2, criteria = 2, adf_maxlag = 2)
+Params = Params + _(model = 2, criteria = 3, adf_maxlag = 2)
+Params = Params + _(model = 2, criteria = 4, adf_maxlag = 2)
 
-Params = Params + _(model = 3, choice = 1, adf_maxlag = 2)
-Params = Params + _(model = 3, choice = 2, adf_maxlag = 2)
-Params = Params + _(model = 3, choice = 3, adf_maxlag = 2)
-Params = Params + _(model = 3, choice = 4, adf_maxlag = 2)
+Params = Params + _(model = 3, criteria = 1, adf_maxlag = 2)
+Params = Params + _(model = 3, criteria = 2, adf_maxlag = 2)
+Params = Params + _(model = 3, criteria = 3, adf_maxlag = 2)
+Params = Params + _(model = 3, criteria = 4, adf_maxlag = 2)
 
-Params = Params + _(model = 4, choice = 1, adf_maxlag = 2)
-Params = Params + _(model = 4, choice = 2, adf_maxlag = 2)
-Params = Params + _(model = 4, choice = 3, adf_maxlag = 2)
-Params = Params + _(model = 4, choice = 4, adf_maxlag = 2)
+Params = Params + _(model = 4, criteria = 1, adf_maxlag = 2)
+Params = Params + _(model = 4, criteria = 2, adf_maxlag = 2)
+Params = Params + _(model = 4, criteria = 3, adf_maxlag = 2)
+Params = Params + _(model = 4, criteria = 4, adf_maxlag = 2)
 
 function void test_model_parameters (const bundles P, const list L)
     print "Start testing model parameter space()."
@@ -40,13 +40,13 @@ function void test_model_parameters (const bundles P, const list L)
     loop foreach i P
         # Given
         scalar model = P[i].model
-        scalar choice = P[i].choice
+        scalar criteria = P[i].criteria
         scalar adf_maxlag = P[i].adf_maxlag
 
-        print model choice adf_maxlag
+        print model criteria adf_maxlag
 
         # When
-        bundle Model = estimateGH(y, x, model, choice, adf_maxlag)
+        bundle Model = estimateGH(y, x, model, criteria, adf_maxlag)
     endloop
 end function
 test_model_parameters(Params, dataset)
@@ -61,11 +61,11 @@ function void test_baseline_estimation (const list L)
     matrix x = { L.ynr } ~ { L.sr }     # Exogenous
 
     scalar type_break = 4        # Select break-type: 2=C, 3=C/T, 4=C/S
-    scalar choice = 2       # only for ADF*-test relevant
+    scalar criteria = 2       # only for ADF*-test relevant
     scalar k = 6            # maximum lag for ADF test
 
     # When
-    bundle model = estimateGH(y, x, type_break, choice, k)
+    bundle model = estimateGH(y, x, type_break, criteria, k)
 
     expected_lag_adf = 4
     expected_tstat_adf = -4.77755

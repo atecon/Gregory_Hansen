@@ -11,11 +11,11 @@ matrix x = { ynr } ~ { sr } # Exogenous
 
 # Model parameters
 scalar model = 2
-scalar choice = 2
+scalar criteria = 2
 scalar k = 6
 
 # Estimation
-Model = estimateGH(y, x, model, choice, k)
+Model = estimateGH(y, x, model, criteria, k)
 print Model
 
 # Plot regime shift

@@ -8,7 +8,7 @@ URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
 
 
 estimateGH(const matrix y, const matrix x, int model[1::],
-           int choice[1::], int k[1::])
+           int criteria[1::], int k[1::])
 ======================================================================
 Public function for estimating the model. Returns a bundle with various
 information.
@@ -21,7 +21,7 @@ model      - int, Choice for model:
              = 2: break in intercept
              = 3: break in intercept and linear trend
              = 4: break in intercept and slope coefficients
-choice     - int, Information criteria for ADF lag-selection:
+criteria     - int, Information criteria for ADF lag-selection:
              = 1: pre-specified AR lag
              = 2: AIC-chosen AR lag
              = 3: BIC-chosen AR lag

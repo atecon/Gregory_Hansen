@@ -17,7 +17,7 @@ URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
 
 
 estimateGH(const matrix y, const matrix x, int model[1::],
-           int choice[1::], int k[1::])
+           int criteria[1::], int k[1::])
 ======================================================================
 Public function for estimating the model. Returns a bundle with various
 information.
@@ -30,7 +30,7 @@ model      - int, Choice for model:
              = 2: break in intercept
              = 3: break in intercept and linear trend
              = 4: break in intercept and slope coefficients
-choice     - int, Information criteria for ADF lag-selection:
+criteria     - int, Information criteria for ADF lag-selection:
              = 1: pre-specified AR lag
              = 2: AIC-chosen AR lag
              = 3: BIC-chosen AR lag
@@ -101,14 +101,14 @@ joe96_data.gdt </data-files>
   <param name="y" type="matrix" const="true"/>
   <param name="x" type="matrix" const="true"/>
   <param name="model" type="int" min="2"/>
-  <param name="choice" type="int" min="1"/>
+  <param name="criteria" type="int" min="1"/>
   <param name="adf_maxlag" type="int" min="1"/>
  </params>
 <code>/* Estimate model and return results. */
 bundle Ret = null
 bundle self = initialization(y, x)
 self.model = model
-self.choice = choice
+self.criteria = criteria
 self.adf_maxlag = adf_maxlag
 scalar t = self.t
 # Loop over different samples
@@ -146,7 +146,7 @@ Ret.nX = self.nX
 Ret.T = self.T
 Ret.obs_ids = self.obs_ids
 Ret.model = model
-Ret.choice = choice
+Ret.criteria = criteria
 Ret.adf_maxlag = adf_maxlag
 Ret.tstatistics_adf = self.stats_adf
 Ret.tstatistics_zt = self.stats_zt
@@ -209,15 +209,15 @@ loop while adf_maxlag &gt;= 0 -q
   matrix bhat = Model.bhat
   matrix uhat = Model.e
   matrix se = Model.se
-  if self.choice == 1  # K is pre-specified
+  if self.criteria == 1  # K is pre-specified
     stats_adf[start] = -1000   # set a random negative constant #
     lags_adf[start] = bhat[1] / se[1]
     break
-  elif self.choice == 2  # K is determined by AIC #
+  elif self.criteria == 2  # K is determined by AIC #
     ic = ln(uhat'uhat / n1) + 2 * (adf_maxlag + 2) / n1
-  elif self.choice == 3  # K is determined by BIC #
+  elif self.criteria == 3  # K is determined by BIC #
     ic = ln(uhat'uhat / n1) + (adf_maxlag + 2) * ln(n1) / n1
-  elif self.choice == 4 # K is determined by downward t #
+  elif self.criteria == 4 # K is determined by downward t #
     if abs(bhat[start] / se[start]) &gt;= 1.96 || adf_maxlag == 0
       stats_adf[start] = -1000    # set a random negative constant
       lags_adf[start] = bhat[1] / se[1]
@@ -424,7 +424,7 @@ printf &quot;\n====================================================\n&quot;
 printf &quot;*** Gregory-Hansen cointegration test results ***\n\n&quot;
 printf &quot;Model type:       %s\n&quot;, get_model_description(self.model)
 printf &quot;Maximum AR lag:   %d\n&quot;, self.adf_maxlag
-printf &quot;Lag-selection:    %s\n\n&quot;, get_criteria_description(self.choice)
+printf &quot;Lag-selection:    %s\n\n&quot;, get_criteria_description(self.criteria)
 printf &quot;******** ADF Test ***********\n&quot;
 printf &quot;optimal AR lag =    %d\n&quot;, self.lag_adf
 printf &quot;t-statistic =       %.3f\n&quot;, self.tstat_adf
@@ -474,11 +474,11 @@ matrix x = { ynr } ~ { sr } # Exogenous
 
 # Model parameters
 scalar model = 2
-scalar choice = 2
+scalar criteria = 2
 scalar k = 6
 
 # Estimation
-Model = estimateGH(y, x, model, choice, k)
+Model = estimateGH(y, x, model, criteria, k)
 print Model
 
 # Plot regime shift

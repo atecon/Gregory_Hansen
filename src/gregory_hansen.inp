@@ -35,18 +35,18 @@ function bundle adftest (const matrix x,
         matrix uhat = Model.e
         matrix se = Model.se
 
-        if self.choice == 1  # K is pre-specified
+        if self.criteria == 1  # K is pre-specified
             stats_adf[start] = -1000   # set a random negative constant #
             lags_adf[start] = bhat[1] / se[1]
             break
 
-        elif self.choice == 2  # K is determined by AIC #
+        elif self.criteria == 2  # K is determined by AIC #
             ic = ln(uhat'uhat / n1) + 2 * (adf_maxlag + 2) / n1
 
-        elif self.choice == 3  # K is determined by BIC #
+        elif self.criteria == 3  # K is determined by BIC #
             ic = ln(uhat'uhat / n1) + (adf_maxlag + 2) * ln(n1) / n1
 
-        elif self.choice == 4 # K is determined by downward t #
+        elif self.criteria == 4 # K is determined by downward t #
             if abs(bhat[start] / se[start]) >= 1.96 || adf_maxlag == 0
                 stats_adf[start] = -1000    # set a random negative constant
                 lags_adf[start] = bhat[1] / se[1]
@@ -231,14 +231,14 @@ end function
 function bundle estimateGH (const matrix y,
                             const matrix x,
                             int model[2::],
-                            int choice[1::],
+                            int criteria[1::],
                             int adf_maxlag[1::])
     /* Estimate model and return results. */
 
     bundle Ret = null
     bundle self = initialization(y, x)
     self.model = model
-    self.choice = choice
+    self.criteria = criteria
     self.adf_maxlag = adf_maxlag
 
     scalar t = self.t
@@ -292,7 +292,7 @@ function bundle estimateGH (const matrix y,
     Ret.T = self.T
     Ret.obs_ids = self.obs_ids
     Ret.model = model
-    Ret.choice = choice
+    Ret.criteria = criteria
     Ret.adf_maxlag = adf_maxlag
 
     Ret.tstatistics_adf = self.stats_adf
@@ -344,7 +344,7 @@ function void printGH (const bundle self)
 
     printf "Model type:       %s\n", get_model_description(self.model)
     printf "Maximum AR lag:   %d\n", self.adf_maxlag
-    printf "Lag-selection:    %s\n\n", get_criteria_description(self.choice)
+    printf "Lag-selection:    %s\n\n", get_criteria_description(self.criteria)
 
     printf "******** ADF Test ***********\n"
     printf "optimal AR lag =    %d\n", self.lag_adf
