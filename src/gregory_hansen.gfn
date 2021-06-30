@@ -3,12 +3,12 @@
 <gretl-function-package name="gregory_hansen" needs-time-series-data="true" minver="2021b" lives-in-subdir="true">
 <author email="atecon@posteo.de">Artur Tarassow</author>
 <version>1.0</version>
-<date>2021-06-29</date>
+<date>2021-06-30</date>
 <description>Cointegration with regime-shifts</description>
 <tags>C53</tags>
 <help>
-Package for testing for cointegration with regime-shifts using a single-equation
-model.
+Package for testing for cointegration with regime-shifts using a
+single-equation model.
 
 Reference:
 Allan W. Gregory and Bruce E. Hansen (1996):&quot;Residual-based tests for
@@ -16,10 +16,10 @@ cointegration in models with regime shifts&quot;, Journal of Econometrics
 URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
 
 
-
-estimateGH(const matrix y, const matrix x, int model[1::], int choice[1::], int k[1::])
-==================================================================================
-Main public function for estimating the model. Returns a bundle with various
+estimateGH(const matrix y, const matrix x, int model[1::],
+           int choice[1::], int k[1::])
+======================================================================
+Public function for estimating the model. Returns a bundle with various
 information.
 
 Parameters:
@@ -35,7 +35,7 @@ choice     - int, Information criteria for ADF lag-selection:
              = 2: AIC-chosen AR lag
              = 3: BIC-chosen AR lag
              = 4: Downward-t-chosen AR lag
-k          - int, maximum lag for ADF test
+adf_maxlag  - int, maximum lag for ADF test
 
 Return:
 --------
@@ -64,14 +64,14 @@ breakpoint_obslabel_zt : Date of break of breakpoint of Zt test
 
 
 plotGH(const bundle self, string filename[null])
-==================================================================================
+========================================================================
 Plot estimated test statistics for each sample considered.
 
 Parameters:
 -----------
 self       - bundle, Bundle returned by estimateGH()
-filename   - string, Full path and filename for storing plot (default: plot
-             appears immediately at screen)
+filename   - string, Full path and filename for storing plot
+             (default: plot appears immediately at screen)
 
 Return:
 --------
@@ -100,113 +100,62 @@ joe96_data.gdt </data-files>
  <params count="5">
   <param name="y" type="matrix" const="true"/>
   <param name="x" type="matrix" const="true"/>
-  <param name="model" type="int" min="1"/>
+  <param name="model" type="int" min="2"/>
   <param name="choice" type="int" min="1"/>
-  <param name="k" type="int" min="1"/>
+  <param name="adf_maxlag" type="int" min="1"/>
  </params>
 <code>/* Estimate model and return results. */
-bundle self
-scalar n = rows(y)
-scalar begin = round(0.15 * n)
-scalar final = round(0.85 * n)
-matrix obs_ids = seq(begin, final)'
-matrix stats_adf = zeros((final - begin + 1), 1)
-matrix lags_adf = stats_adf
-matrix stats_za = stats_adf
-matrix stats_zt = stats_adf
-scalar t = begin
-loop while t &lt;= final -q
-  matrix dummy = zeros(t, 1) | ones((n - t), 1)
-  # adjust regressors for different models
-  matrix z = x
-  if model == 3         # C/T
-    matrix z = ones(n, 1) ~ dummy ~ seq(1, n)' ~ x
-  elif model == 4       # C/S
-    matrix z = ones(n, 1) ~ dummy ~ x ~ dummy .* x
-  elif model == 2       # C
-    matrix z = ones(n, 1) ~ dummy ~ x
-  endif
-  # computer ADF for each t
-  mtmp = adftest(y, z, k, choice)
-  stats_adf[t-begin+1] = mtmp[1]      # teststat
-  lags_adf[t-begin+1] = mtmp[2]      # lag-order of ADF test
+bundle Ret = null
+bundle self = initialization(y, x)
+self.model = model
+self.choice = choice
+self.adf_maxlag = adf_maxlag
+scalar t = self.t
+# Loop over different samples
+loop while t &lt;= self.final -q
+  matrix z = compile_regressors(self, t)
+  scalar idx = t - self.begin + 1
+  bundle Adf = adftest(z, self)
+  self.stats_adf[idx] = Adf.tstat
+  self.lags_adf[idx] = Adf.optimal_lag
   bundle p = phillips(y, z)
-  stats_za[t-begin+1] = p.tstat_za
-  stats_zt[t-begin+1] = p.tstat_zt
+  self.stats_za[idx] = p.tstat_za
+  self.stats_zt[idx] = p.tstat_zt
   t++
 endloop
-scalar n_vars = cols(z)
-#  ADF test
-scalar tstat_adf = minc(stats_adf)
-scalar lag = iminc(stats_adf)
-scalar breakpoint_pct_adf = (lag + begin - 1) / n
-scalar breakpoint_obsnum_adf = obs_ids[iminc(stats_adf)]
-scalar lag = lags_adf[lag]
 matrix critvalues_adf, critvalues_za, critvalues_zt
-printf &quot;******** ADF Test ***********\n&quot;
-printf &quot;AR lag = %d\n&quot;, lag
-printf &quot;t-statistic = %.3f\n&quot;, tstat_adf
-printf &quot;Break point (ADF) at T = '%s'.\n&quot;, obslabel(breakpoint_obsnum_adf)
-if n_vars &lt;= 4
-  matrix critvalues_adf = critadfzt(n_vars, model)
-  printf &quot;Critical values (ADF): \n&quot;
-  printf &quot;CV 0.01 = %6.3f \n&quot;, critvalues_adf[1]
-  printf &quot;CV 0.025 = %6.3f \n&quot;, critvalues_adf[2]
-  printf &quot;CV 0.05 = %6.3f \n&quot;, critvalues_adf[3]
-  printf &quot;CV 0.10 = %6.3f\n&quot;, critvalues_adf[4]
+if self.nX &lt;= 4
+  matrix Ret.critvalues_adf = critadfzt(self.nX, model)
+  matrix Ret.critvalues_zt = Ret.critvalues_adf
+  matrix Ret.critvalues_za = critza(self.nX, model)
 endif
-printf &quot;\n&quot;
-#  Phillips test
-scalar tstat_za = minc(stats_za)
-scalar tstat_zt = minc(stats_zt)
-scalar breakpoint_pct_za = (iminc(stats_za) + begin - 1) / n
-scalar breakpoint_pct_zt = (iminc(stats_zt) + begin - 1) / n
-scalar breakpoint_obsnum_za = obs_ids[iminc(stats_za)]
-scalar breakpoint_obsnum_zt = obs_ids[iminc(stats_zt)]
-printf &quot;******** Phillips Test ********\n&quot;
-printf &quot;Test statistics Zt = %.3f\n&quot;, tstat_zt
-printf &quot;Break point (Zt) at T = '%s'\n&quot;, obslabel(breakpoint_obsnum_zt)
-if n_vars &lt;= 4
-  printf &quot;Critical values (Zt): \n&quot;
-  printf &quot;CV 0.01 = %6.3f \n&quot;, critvalues_adf[1]
-  printf &quot;CV 0.025 = %6.3f \n&quot;, critvalues_adf[2]
-  printf &quot;CV 0.05 = %6.3f \n&quot;, critvalues_adf[3]
-  printf &quot;CV 0.10 = %6.3f\n&quot;, critvalues_adf[4]
-endif
-printf &quot;\n&quot;
-printf &quot;Test statistics Za = %.3f\n&quot;, tstat_zt
-printf &quot;Break point (Za) at T = '%s'\n&quot;, obslabel(breakpoint_obsnum_za)
-if n_vars &lt;= 4
-  matrix critvalues_za = critza(n_vars,model)
-  printf &quot;Critical values (Za): \n&quot;
-  printf &quot;CV 0.01 = %6.3f \n&quot;, critvalues_za[1]
-  printf &quot;CV 0.025 = %6.3f \n&quot;, critvalues_za[2]
-  printf &quot;CV 0.05 = %6.3f \n&quot;, critvalues_za[3]
-  printf &quot;CV 0.10 = %6.3f\n&quot;, critvalues_za[4]
-endif
-printf &quot;\n&quot;
-# Assemble bundle
-self.obs_ids = obs_ids
-self.tstatistics_adf = stats_adf
-self.tstatistics_zt = stats_zt
-self.tstatistics_za = stats_za
-self.lag_adf = lag
-self.tstat_adf = tstat_adf
-self.tstat_zt = tstat_zt
-self.tstat_za = tstat_za
-self.breakpoint_pct_adf = breakpoint_pct_adf
-self.breakpoint_pct_zt = breakpoint_pct_zt
-self.breakpoint_pct_za = breakpoint_pct_za
-self.breakpoint_obsnum_adf = breakpoint_obsnum_adf
-self.breakpoint_obsnum_zt = breakpoint_obsnum_zt
-self.breakpoint_obsnum_za = breakpoint_pct_za
-self.breakpoint_obslabel_adf = obslabel(breakpoint_obsnum_adf)
-self.breakpoint_obslabel_zt = obslabel(breakpoint_obsnum_zt)
-self.breakpoint_obslabel_za = obslabel(breakpoint_obsnum_za)
-self.critvalues_adf = critvalues_adf
-self.critvalues_zt = critvalues_adf
-self.critvalues_za = critvalues_za
-return self
+# Prepare results
+scalar Ret.tstat_adf = minc(self.stats_adf)
+scalar Ret.tstat_za = minc(self.stats_za)
+scalar Ret.tstat_zt = minc(self.stats_zt)
+scalar lag = iminc(self.stats_adf)
+scalar Ret.breakpoint_pct_adf = (lag + self.begin - 1) / self.T
+scalar Ret.breakpoint_obsnum_adf = self.obs_ids[iminc(self.stats_adf)]
+scalar Ret.lag_adf = self.lags_adf[lag]
+scalar Ret.breakpoint_pct_za = (iminc(self.stats_za) + self.begin - 1) / self.T
+scalar Ret.breakpoint_pct_zt = (iminc(self.stats_zt) + self.begin - 1) / self.T
+scalar Ret.breakpoint_obsnum_za = self.obs_ids[iminc(self.stats_za)]
+scalar Ret.breakpoint_obsnum_zt = self.obs_ids[iminc(self.stats_zt)]
+# Assemble final bundle
+Ret.nX = self.nX
+Ret.T = self.T
+Ret.obs_ids = self.obs_ids
+Ret.model = model
+Ret.choice = choice
+Ret.adf_maxlag = adf_maxlag
+Ret.tstatistics_adf = self.stats_adf
+Ret.tstatistics_zt = self.stats_zt
+Ret.tstatistics_za = self.stats_za
+Ret.breakpoint_obslabel_adf = obslabel(Ret.breakpoint_obsnum_adf)
+Ret.breakpoint_obslabel_zt = obslabel(Ret.breakpoint_obsnum_zt)
+Ret.breakpoint_obslabel_za = obslabel(Ret.breakpoint_obsnum_za)
+printGH(Ret)
+return Ret
 </code>
 </gretl-function>
 <gretl-function name="plotGH" type="void">
@@ -221,70 +170,68 @@ return self
 <code>/* Plot information on break points detected.
 return: nothing. */
 string filename = exists(filename) ? filename : &quot;display&quot;
-filename
 matrix mplot = self.tstatistics_adf ~ self.tstatistics_za ~ self.tstatistics_zt ~ self.obs_ids
 cnameset(mplot, defarray(&quot;ADF*&quot;, &quot;Za&quot;, &quot;Zt&quot;, &quot;Sample&quot;))
 plot mplot
-  options with-lp #time-series
+  options with-lp
   literal set title &quot;Regime shifts using ADF*, Za or Zt tests&quot;
   literal set key outside below
 end plot --output=&quot;@filename&quot;
 </code>
 </gretl-function>
-<gretl-function name="adftest" type="matrix" private="1">
- <params count="4">
-  <param name="y" type="matrix" const="true"/>
+<gretl-function name="adftest" type="bundle" private="1">
+ <params count="2">
   <param name="x" type="matrix" const="true"/>
-  <param name="kmax" type="int" min="1" const="true"/>
-  <param name="choice" type="int" min="1" const="true"/>
+  <param name="self" type="bundle" const="true"/>
  </params>
-<code>/* Compute ADF test */
-scalar n = rows(y)
-bundle M = estim(y,x)
-matrix e = M.e
-matrix de = e[2:n] - e[1:n-1]    # difference of residuals
+<code>/* Compute ADF type of test. */
+bundle B
+scalar n = self.T
 scalar ic = 0
-scalar k = kmax
-matrix stats_adf = zeros(kmax+1, 1)
-matrix lags_adf = zeros(kmax+1, 1)
-loop while k &gt;= 0 -q
-  yde = de[1+k:n-1]
+scalar adf_maxlag = self.adf_maxlag
+matrix stats_adf = zeros((self.adf_maxlag + 1), 1)
+matrix lags_adf = zeros((self.adf_maxlag + 1), 1)
+bundle Model = run_ols(self.y, x)
+matrix e = Model.e
+matrix de = diff(e)
+loop while adf_maxlag &gt;= 0 -q
+  scalar start = 1 + adf_maxlag
+  scalar ende = n - 1
+  yde = de[start:ende]
+  xe = e[start:ende]
   n1 = rows(yde)
-  #  set up matrix for independent variable(lagged residuals)  #
-  xe = e[k+1:n-1]
   scalar j = 1
-  loop while j &lt;= k -q
-    xe = xe ~ de[k+1-j:n-1-j]
+  loop while j &lt;= adf_maxlag -q
+    xe = xe ~ de[start-j:ende-j]
     j++
   endloop
-  bundle M = estim(yde, xe)
-  matrix bhat = M.bhat
-  matrix e1 = M.e
-  scalar sig2 = M.sig2
-  matrix se = M.se
-  if choice == 1  # K is pre-specified
-    stats_adf[k+1] = -1000   # set a random negative constant #
-    lags_adf[k+1] = bhat[1] / se[1]
+  bundle Model = run_ols(yde, xe)
+  matrix bhat = Model.bhat
+  matrix uhat = Model.e
+  matrix se = Model.se
+  if self.choice == 1  # K is pre-specified
+    stats_adf[start] = -1000   # set a random negative constant #
+    lags_adf[start] = bhat[1] / se[1]
     break
-  elif choice == 2  # K is determined by AIC #
-    ic = ln(e1'e1 / n1) + 2 * (k + 2) / n1
-  elif choice == 3  # K is determined by BIC #
-    ic = ln(e1'e1 / n1) + (k + 2) * ln(n1) / n1
-  elif choice == 4 # K is determined by downward t #
-    if abs(bhat[k+1] / se[k+1]) &gt;= 1.96 || k == 0
-      stats_adf[k+1] = -1000    # set a random negative constant #
-      lags_adf[k+1] = bhat[1] / se[1]
+  elif self.choice == 2  # K is determined by AIC #
+    ic = ln(uhat'uhat / n1) + 2 * (adf_maxlag + 2) / n1
+  elif self.choice == 3  # K is determined by BIC #
+    ic = ln(uhat'uhat / n1) + (adf_maxlag + 2) * ln(n1) / n1
+  elif self.choice == 4 # K is determined by downward t #
+    if abs(bhat[start] / se[start]) &gt;= 1.96 || adf_maxlag == 0
+      stats_adf[start] = -1000    # set a random negative constant
+      lags_adf[start] = bhat[1] / se[1]
       break
     endif
   endif
-  stats_adf[k+1] = ic
-  lags_adf[k+1] = bhat[1] / se[1]
-  k--
+  stats_adf[start] = ic
+  lags_adf[start] = bhat[1] / se[1]
+  adf_maxlag--
 endloop
 matrix lag = iminc(stats_adf)
 matrix tstat = lags_adf[lag]
-matrix OUT = tstat ~ (lag - 1)
-return OUT
+B = _(tstat, optimal_lag = (lag-1))
+return B
 </code>
 </gretl-function>
 <gretl-function name="critza" type="matrix" private="1">
@@ -339,18 +286,17 @@ cnameset(RET, &quot;CV1 CV25 CV5 CV10&quot;)
 return RET
 </code>
 </gretl-function>
-<gretl-function name="estim" type="bundle" private="1">
+<gretl-function name="run_ols" type="bundle" private="1">
  <params count="2">
   <param name="y" type="matrix" const="true"/>
   <param name="x" type="matrix" const="true"/>
  </params>
 <code>/* OLS estimation. */
 bundle B
-matrix m = invpd(x'*x)
-matrix B.bhat = mols(y,x)
-matrix e = y - x * B.bhat
-matrix B.sig2 = (e'e) / (rows(y) - cols(x))
-matrix B.se = sqrt(diag(m) * B.sig2)
+matrix e, vcv
+matrix B.bhat = mols(y, x, &amp;e, &amp;vcv)
+matrix B.sigma = (e'e) / (rows(y) - cols(x))
+matrix B.se = sqrt(diag(vcv) * B.sigma)
 B.e = e
 return B
 </code>
@@ -362,8 +308,9 @@ return B
  </params>
 <code>/* Quintos-Phillips test. */
 scalar n = rows(y)
-matrix b = mols(y, x, null, null)
-matrix e = y - x * b
+bundle Model = run_ols(y, x)
+matrix e = Model.e
+matrix b = Model.bhat
 #  OLS regression on residuals
 matrix be = e[2:n] \ e[1:n-1]
 matrix ue = e[2:n] - e[1:n-1] * be
@@ -393,11 +340,131 @@ matrix tstat_zt = (p - 1) / sqrt(s)
 return _(tstat_za, tstat_zt)
 </code>
 </gretl-function>
+<gretl-function name="initialization" type="bundle" private="1">
+ <params count="2">
+  <param name="y" type="matrix" const="true"/>
+  <param name="x" type="matrix" const="true"/>
+ </params>
+<code>/* Initialize parameters.
+return: bundle */
+bundle self
+matrix self.y = y
+matrix self.x = x
+scalar self.T = rows(y)
+scalar self.nX = cols(x)
+scalar self.begin = round(0.15 * self.T)
+scalar self.final = round(0.85 * self.T)
+scalar self.t = self.begin
+matrix self.obs_ids = seq(self.begin, self.final)'
+matrix self.stats_adf = zeros((self.final - self.begin + 1), 1)
+matrix self.lags_adf = self.stats_adf
+matrix self.stats_za = self.stats_adf
+matrix self.stats_zt = self.stats_adf
+return self
+</code>
+</gretl-function>
+<gretl-function name="compile_regressors" type="matrix" private="1">
+ <params count="2">
+  <param name="self" type="bundle" const="true"/>
+  <param name="t" type="int" const="true"/>
+ </params>
+<code>/* Compile matrix of regressors
+return: type, description */
+matrix dummy = zeros(t, 1) | ones((self.T - t), 1)
+if self.model == 1
+  matrix z = self.x
+else
+  matrix z = ones(self.T, 1) ~ dummy
+endif
+if self.model == 2           # break in intercept
+  z ~= self.x
+elif self.model == 3         # break in intercept and trend
+  z ~= seq(1, self.T)' ~ self.x
+elif self.model == 4         # break in intercept and slope
+  z ~= self.x ~ dummy .* self.x
+endif
+return z
+</code>
+</gretl-function>
+<gretl-function name="get_model_description" type="string" private="1">
+ <params count="1">
+  <param name="model" type="int" min="2" max="4" const="true"/>
+ </params>
+<code>if model == 2
+  return &quot;Break in intercept&quot;
+elif model == 3
+  return &quot;Break in intercept and linear trend&quot;
+elif model == 4
+  return &quot;Break in intercept and slope coefficients&quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="get_criteria_description" type="string" private="1">
+ <params count="1">
+  <param name="criteria" type="int" min="1" max="4" const="true"/>
+ </params>
+<code>if criteria == 1
+  return &quot;Pre-specified AR lag&quot;
+elif criteria == 2
+  return &quot;AIC-chosen AR lag&quot;
+elif criteria == 3
+  return &quot;BIC-chosen AR lag&quot;
+elif criteria == 4
+  return &quot;Downward-t-chosen AR lag&quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="printGH" type="void" private="1">
+ <params count="1">
+  <param name="self" type="bundle" const="true"/>
+ </params>
+<code>/* Print results
+return: nothing */
+printf &quot;\n====================================================\n&quot;
+printf &quot;*** Gregory-Hansen cointegration test results ***\n\n&quot;
+printf &quot;Model type:       %s\n&quot;, get_model_description(self.model)
+printf &quot;Maximum AR lag:   %d\n&quot;, self.adf_maxlag
+printf &quot;Lag-selection:    %s\n\n&quot;, get_criteria_description(self.choice)
+printf &quot;******** ADF Test ***********\n&quot;
+printf &quot;optimal AR lag =    %d\n&quot;, self.lag_adf
+printf &quot;t-statistic =       %.3f\n&quot;, self.tstat_adf
+printf &quot;Break point at T =  '%s'\n&quot;, obslabel(self.breakpoint_obsnum_adf)
+if self.nX &lt;= 4
+  printf &quot;\nCritical values: \n&quot;
+  printf &quot;CV 0.01 =           %6.3f \n&quot;, self.critvalues_adf[1]
+  printf &quot;CV 0.025 =          %6.3f \n&quot;, self.critvalues_adf[2]
+  printf &quot;CV 0.05 =           %6.3f \n&quot;, self.critvalues_adf[3]
+  printf &quot;CV 0.10 =           %6.3f\n&quot;, self.critvalues_adf[4]
+endif
+printf &quot;\n******** Phillips 'Zt' Test ********\n&quot;
+printf &quot;t-statistic =       %.3f\n&quot;, self.tstat_zt
+printf &quot;Break point at T =  '%s'\n&quot;, obslabel(self.breakpoint_obsnum_zt)
+if self.nX &lt;= 4
+  printf &quot;Critical values: \n&quot;
+  printf &quot;CV 0.01 =           %6.3f \n&quot;, self.critvalues_adf[1]
+  printf &quot;CV 0.025 =          %6.3f \n&quot;, self.critvalues_adf[2]
+  printf &quot;CV 0.05 =           %6.3f \n&quot;, self.critvalues_adf[3]
+  printf &quot;CV 0.10 =           %6.3f\n&quot;, self.critvalues_adf[4]
+endif
+printf &quot;\n******** Phillips 'Za' Test ********\n&quot;
+printf &quot;t-statistic =       %.3f\n&quot;, self.tstat_za
+printf &quot;Break point at T =  '%s'\n&quot;, obslabel(self.breakpoint_obsnum_za)
+if self.nX &lt;= 4
+  printf &quot;Critical values: \n&quot;
+  printf &quot;CV 0.01 =           %6.3f \n&quot;, self.critvalues_za[1]
+  printf &quot;CV 0.025 =          %6.3f \n&quot;, self.critvalues_za[2]
+  printf &quot;CV 0.05 =           %6.3f \n&quot;, self.critvalues_za[3]
+  printf &quot;CV 0.10 =           %6.3f\n&quot;, self.critvalues_za[4]
+endif
+printf &quot;\n&quot;
+printf &quot;\n====================================================\n&quot;
+</code>
+</gretl-function>
 <sample-script>
 clear
 set verbose off
-include gregory_hansen.gfn
 
+include gregory_hansen.gfn
 open joe96_data.gdt --frompkg=gregory_hansen
 
 smpl 1960:1 1990:4      # Sample selected in the original article
@@ -411,9 +478,8 @@ scalar choice = 2
 scalar k = 6
 
 # Estimation
-eval $nobs
-eval $t1 ~ $t2
 Model = estimateGH(y, x, model, choice, k)
+print Model
 
 # Plot regime shift
 plotGH(Model)

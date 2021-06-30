@@ -1,63 +1,70 @@
-function matrix adftest (const matrix y,
-                         const matrix x,
-                         const int kmax[1::],
-                         const int choice[1::])
-    /* Compute ADF test */
+function bundle adftest (const matrix x,
+                         const bundle self)
+    /* Compute ADF type of test. */
 
-    scalar n = rows(y)
-    bundle M = estim(y,x)
-    matrix e = M.e
-    matrix de = e[2:n] - e[1:n-1]    # difference of residuals
+    bundle B
+
+    scalar n = self.T
     scalar ic = 0
-    scalar k = kmax
-    matrix stats_adf = zeros(kmax+1, 1)
-    matrix lags_adf = zeros(kmax+1, 1)
+    scalar adf_maxlag = self.adf_maxlag
 
-    loop while k >= 0 -q
-        yde = de[1+k:n-1]
+    matrix stats_adf = zeros((self.adf_maxlag + 1), 1)
+    matrix lags_adf = zeros((self.adf_maxlag + 1), 1)
+
+    bundle Model = run_ols(self.y, x)
+    matrix e = Model.e
+    matrix de = diff(e)
+
+    loop while adf_maxlag >= 0 -q
+
+        scalar start = 1 + adf_maxlag
+        scalar ende = n - 1
+
+        yde = de[start:ende]
+        xe = e[start:ende]
         n1 = rows(yde)
 
-        #  set up matrix for independent variable(lagged residuals)  #
-        xe = e[k+1:n-1]
         scalar j = 1
-
-        loop while j <= k -q
-            xe = xe ~ de[k+1-j:n-1-j]
+        loop while j <= adf_maxlag -q
+            xe = xe ~ de[start-j:ende-j]
             j++
         endloop
 
-        bundle M = estim(yde, xe)
-        matrix bhat = M.bhat
-        matrix e1 = M.e
-        scalar sig2 = M.sig2
-        matrix se = M.se
+        bundle Model = run_ols(yde, xe)
+        matrix bhat = Model.bhat
+        matrix uhat = Model.e
+        matrix se = Model.se
 
-        if choice == 1  # K is pre-specified
-            stats_adf[k+1] = -1000   # set a random negative constant #
-            lags_adf[k+1] = bhat[1] / se[1]
+        if self.choice == 1  # K is pre-specified
+            stats_adf[start] = -1000   # set a random negative constant #
+            lags_adf[start] = bhat[1] / se[1]
             break
-        elif choice == 2  # K is determined by AIC #
-            ic = ln(e1'e1 / n1) + 2 * (k + 2) / n1
-        elif choice == 3  # K is determined by BIC #
-            ic = ln(e1'e1 / n1) + (k + 2) * ln(n1) / n1
-        elif choice == 4 # K is determined by downward t #
-            if abs(bhat[k+1] / se[k+1]) >= 1.96 || k == 0
-                stats_adf[k+1] = -1000    # set a random negative constant #
-                lags_adf[k+1] = bhat[1] / se[1]
+
+        elif self.choice == 2  # K is determined by AIC #
+            ic = ln(uhat'uhat / n1) + 2 * (adf_maxlag + 2) / n1
+
+        elif self.choice == 3  # K is determined by BIC #
+            ic = ln(uhat'uhat / n1) + (adf_maxlag + 2) * ln(n1) / n1
+
+        elif self.choice == 4 # K is determined by downward t #
+            if abs(bhat[start] / se[start]) >= 1.96 || adf_maxlag == 0
+                stats_adf[start] = -1000    # set a random negative constant
+                lags_adf[start] = bhat[1] / se[1]
                 break
             endif
         endif
 
-        stats_adf[k+1] = ic
-        lags_adf[k+1] = bhat[1] / se[1]
-        k--
+        stats_adf[start] = ic
+        lags_adf[start] = bhat[1] / se[1]
+        adf_maxlag--
     endloop
 
     matrix lag = iminc(stats_adf)
     matrix tstat = lags_adf[lag]
-    matrix OUT = tstat ~ (lag - 1)
 
-    return OUT
+    B = _(tstat, optimal_lag = (lag-1))
+
+    return B
 end function
 
 
@@ -110,16 +117,16 @@ function matrix critadfzt (const int m[1::] "number of regressors",
 end function
 
 
-function bundle estim (const matrix y,
-                       const matrix x)
+function bundle run_ols (const matrix y,
+                         const matrix x)
     /* OLS estimation. */
 
     bundle B
-    matrix m = invpd(x'*x)
-    matrix B.bhat = mols(y,x)
-    matrix e = y - x * B.bhat
-    matrix B.sig2 = (e'e) / (rows(y) - cols(x))
-    matrix B.se = sqrt(diag(m) * B.sig2)
+    matrix e, vcv
+
+    matrix B.bhat = mols(y, x, &e, &vcv)
+    matrix B.sigma = (e'e) / (rows(y) - cols(x))
+    matrix B.se = sqrt(diag(vcv) * B.sigma)
     B.e = e
 
     return B
@@ -131,8 +138,10 @@ function bundle phillips (const matrix y,
     /* Quintos-Phillips test. */
 
     scalar n = rows(y)
-    matrix b = mols(y, x, null, null)
-    matrix e = y - x * b
+
+    bundle Model = run_ols(y, x)
+    matrix e = Model.e
+    matrix b = Model.bhat
 
     #  OLS regression on residuals
     matrix be = e[2:n] \ e[1:n-1]
@@ -169,139 +178,214 @@ function bundle phillips (const matrix y,
 end function
 
 
-function bundle estimateGH (const matrix y,
-                            const matrix x,
-                            int model[1::],
-                            int choice[1::],
-                            int k[1::])
-    /* Estimate model and return results. */
+function bundle initialization (const matrix y, const matrix x)
+    /* Initialize parameters.
+    return: bundle */
 
     bundle self
-    scalar n = rows(y)
-    scalar begin = round(0.15 * n)
-    scalar final = round(0.85 * n)
-    matrix obs_ids = seq(begin, final)'
-    matrix stats_adf = zeros((final - begin + 1), 1)
-    matrix lags_adf = stats_adf
-    matrix stats_za = stats_adf
-    matrix stats_zt = stats_adf
-    scalar t = begin
 
-    loop while t <= final -q
-        matrix dummy = zeros(t, 1) | ones((n - t), 1)
+    matrix self.y = y
+    matrix self.x = x
 
-        # adjust regressors for different models
-        matrix z = x
-        if model == 3         # C/T
-            matrix z = ones(n, 1) ~ dummy ~ seq(1, n)' ~ x
-        elif model == 4       # C/S
-            matrix z = ones(n, 1) ~ dummy ~ x ~ dummy .* x
-        elif model == 2       # C
-            matrix z = ones(n, 1) ~ dummy ~ x
-        endif
+    scalar self.T = rows(y)
+    scalar self.nX = cols(x)
+    scalar self.begin = round(0.15 * self.T)
+    scalar self.final = round(0.85 * self.T)
+    scalar self.t = self.begin
+    matrix self.obs_ids = seq(self.begin, self.final)'
 
-        # computer ADF for each t
-        mtmp = adftest(y, z, k, choice)
-        stats_adf[t-begin+1] = mtmp[1]      # teststat
-        lags_adf[t-begin+1] = mtmp[2]      # lag-order of ADF test
+    matrix self.stats_adf = zeros((self.final - self.begin + 1), 1)
+    matrix self.lags_adf = self.stats_adf
+    matrix self.stats_za = self.stats_adf
+    matrix self.stats_zt = self.stats_adf
+
+    return self
+end function
+
+
+function matrix compile_regressors (const bundle self,
+                                    const int t)
+    /* Compile matrix of regressors
+    return: type, description */
+
+    matrix dummy = zeros(t, 1) | ones((self.T - t), 1)
+
+    if self.model == 1
+        matrix z = self.x
+    else
+        matrix z = ones(self.T, 1) ~ dummy
+    endif
+
+    if self.model == 2           # break in intercept
+        z ~= self.x
+    elif self.model == 3         # break in intercept and trend
+        z ~= seq(1, self.T)' ~ self.x
+    elif self.model == 4         # break in intercept and slope
+        z ~= self.x ~ dummy .* self.x
+    endif
+
+    return z
+end function
+
+
+function bundle estimateGH (const matrix y,
+                            const matrix x,
+                            int model[2::],
+                            int choice[1::],
+                            int adf_maxlag[1::])
+    /* Estimate model and return results. */
+
+    bundle Ret = null
+    bundle self = initialization(y, x)
+    self.model = model
+    self.choice = choice
+    self.adf_maxlag = adf_maxlag
+
+    scalar t = self.t
+
+    # Loop over different samples
+    loop while t <= self.final -q
+
+        matrix z = compile_regressors(self, t)
+        scalar idx = t - self.begin + 1
+
+        bundle Adf = adftest(z, self)
+
+        self.stats_adf[idx] = Adf.tstat
+        self.lags_adf[idx] = Adf.optimal_lag
 
         bundle p = phillips(y, z)
-        stats_za[t-begin+1] = p.tstat_za
-        stats_zt[t-begin+1] = p.tstat_zt
+        self.stats_za[idx] = p.tstat_za
+        self.stats_zt[idx] = p.tstat_zt
+
         t++
     endloop
 
-    scalar n_vars = cols(z)
-
-    #  ADF test
-    scalar tstat_adf = minc(stats_adf)
-    scalar lag = iminc(stats_adf)
-    scalar breakpoint_pct_adf = (lag + begin - 1) / n
-    scalar breakpoint_obsnum_adf = obs_ids[iminc(stats_adf)]
-    scalar lag = lags_adf[lag]
 
     matrix critvalues_adf, critvalues_za, critvalues_zt
 
+    if self.nX <= 4
+        matrix Ret.critvalues_adf = critadfzt(self.nX, model)
+        matrix Ret.critvalues_zt = Ret.critvalues_adf
+        matrix Ret.critvalues_za = critza(self.nX, model)
+    endif
+
+
+    # Prepare results
+    scalar Ret.tstat_adf = minc(self.stats_adf)
+    scalar Ret.tstat_za = minc(self.stats_za)
+    scalar Ret.tstat_zt = minc(self.stats_zt)
+
+    scalar lag = iminc(self.stats_adf)
+    scalar Ret.breakpoint_pct_adf = (lag + self.begin - 1) / self.T
+    scalar Ret.breakpoint_obsnum_adf = self.obs_ids[iminc(self.stats_adf)]
+    scalar Ret.lag_adf = self.lags_adf[lag]
+
+    scalar Ret.breakpoint_pct_za = (iminc(self.stats_za) + self.begin - 1) / self.T
+    scalar Ret.breakpoint_pct_zt = (iminc(self.stats_zt) + self.begin - 1) / self.T
+    scalar Ret.breakpoint_obsnum_za = self.obs_ids[iminc(self.stats_za)]
+    scalar Ret.breakpoint_obsnum_zt = self.obs_ids[iminc(self.stats_zt)]
+
+
+    # Assemble final bundle
+    Ret.nX = self.nX
+    Ret.T = self.T
+    Ret.obs_ids = self.obs_ids
+    Ret.model = model
+    Ret.choice = choice
+    Ret.adf_maxlag = adf_maxlag
+
+    Ret.tstatistics_adf = self.stats_adf
+    Ret.tstatistics_zt = self.stats_zt
+    Ret.tstatistics_za = self.stats_za
+
+    Ret.breakpoint_obslabel_adf = obslabel(Ret.breakpoint_obsnum_adf)
+    Ret.breakpoint_obslabel_zt = obslabel(Ret.breakpoint_obsnum_zt)
+    Ret.breakpoint_obslabel_za = obslabel(Ret.breakpoint_obsnum_za)
+
+
+    printGH(Ret)
+
+    return Ret
+end function
+
+
+function string get_model_description (const int model[2:4:])
+
+    if model == 2
+        return "Break in intercept"
+    elif model == 3
+        return "Break in intercept and linear trend"
+    elif model == 4
+        return "Break in intercept and slope coefficients"
+    endif
+end function
+
+function string get_criteria_description (const int criteria[1:4:])
+
+    if criteria == 1
+        return "Pre-specified AR lag"
+    elif criteria == 2
+        return "AIC-chosen AR lag"
+    elif criteria == 3
+        return "BIC-chosen AR lag"
+    elif criteria == 4
+        return "Downward-t-chosen AR lag"
+    endif
+end function
+
+
+function void printGH (const bundle self)
+    /* Print results
+    return: nothing */
+
+    printf "\n====================================================\n"
+    printf "*** Gregory-Hansen cointegration test results ***\n\n"
+
+    printf "Model type:       %s\n", get_model_description(self.model)
+    printf "Maximum AR lag:   %d\n", self.adf_maxlag
+    printf "Lag-selection:    %s\n\n", get_criteria_description(self.choice)
+
     printf "******** ADF Test ***********\n"
-    printf "AR lag = %d\n", lag
-    printf "t-statistic = %.3f\n", tstat_adf
-    printf "Break point (ADF) at T = '%s'.\n", obslabel(breakpoint_obsnum_adf)
+    printf "optimal AR lag =    %d\n", self.lag_adf
+    printf "t-statistic =       %.3f\n", self.tstat_adf
+    printf "Break point at T =  '%s'\n", obslabel(self.breakpoint_obsnum_adf)
 
-    if n_vars <= 4
-        matrix critvalues_adf = critadfzt(n_vars, model)
+    if self.nX <= 4
+        printf "\nCritical values: \n"
+        printf "CV 0.01 =           %6.3f \n", self.critvalues_adf[1]
+        printf "CV 0.025 =          %6.3f \n", self.critvalues_adf[2]
+        printf "CV 0.05 =           %6.3f \n", self.critvalues_adf[3]
+        printf "CV 0.10 =           %6.3f\n", self.critvalues_adf[4]
+    endif
 
-        printf "Critical values (ADF): \n"
-        printf "CV 0.01 = %6.3f \n", critvalues_adf[1]
-        printf "CV 0.025 = %6.3f \n", critvalues_adf[2]
-        printf "CV 0.05 = %6.3f \n", critvalues_adf[3]
-        printf "CV 0.10 = %6.3f\n", critvalues_adf[4]
+
+    printf "\n******** Phillips 'Zt' Test ********\n"
+    printf "t-statistic =       %.3f\n", self.tstat_zt
+    printf "Break point at T =  '%s'\n", obslabel(self.breakpoint_obsnum_zt)
+
+    if self.nX <= 4
+        printf "Critical values: \n"
+        printf "CV 0.01 =           %6.3f \n", self.critvalues_adf[1]
+        printf "CV 0.025 =          %6.3f \n", self.critvalues_adf[2]
+        printf "CV 0.05 =           %6.3f \n", self.critvalues_adf[3]
+        printf "CV 0.10 =           %6.3f\n", self.critvalues_adf[4]
+    endif
+
+    printf "\n******** Phillips 'Za' Test ********\n"
+    printf "t-statistic =       %.3f\n", self.tstat_za
+    printf "Break point at T =  '%s'\n", obslabel(self.breakpoint_obsnum_za)
+
+    if self.nX <= 4
+        printf "Critical values: \n"
+        printf "CV 0.01 =           %6.3f \n", self.critvalues_za[1]
+        printf "CV 0.025 =          %6.3f \n", self.critvalues_za[2]
+        printf "CV 0.05 =           %6.3f \n", self.critvalues_za[3]
+        printf "CV 0.10 =           %6.3f\n", self.critvalues_za[4]
     endif
     printf "\n"
 
-    #  Phillips test
-    scalar tstat_za = minc(stats_za)
-    scalar tstat_zt = minc(stats_zt)
-    scalar breakpoint_pct_za = (iminc(stats_za) + begin - 1) / n
-    scalar breakpoint_pct_zt = (iminc(stats_zt) + begin - 1) / n
-    scalar breakpoint_obsnum_za = obs_ids[iminc(stats_za)]
-    scalar breakpoint_obsnum_zt = obs_ids[iminc(stats_zt)]
-
-    printf "******** Phillips Test ********\n"
-    printf "Test statistics Zt = %.3f\n", tstat_zt
-    printf "Break point (Zt) at T = '%s'\n", obslabel(breakpoint_obsnum_zt)
-
-
-    if n_vars <= 4
-        printf "Critical values (Zt): \n"
-        printf "CV 0.01 = %6.3f \n", critvalues_adf[1]
-        printf "CV 0.025 = %6.3f \n", critvalues_adf[2]
-        printf "CV 0.05 = %6.3f \n", critvalues_adf[3]
-        printf "CV 0.10 = %6.3f\n", critvalues_adf[4]
-    endif
-    printf "\n"
-
-    printf "Test statistics Za = %.3f\n", tstat_zt
-    printf "Break point (Za) at T = '%s'\n", obslabel(breakpoint_obsnum_za)
-
-    if n_vars <= 4
-        matrix critvalues_za = critza(n_vars,model)
-
-        printf "Critical values (Za): \n"
-        printf "CV 0.01 = %6.3f \n", critvalues_za[1]
-        printf "CV 0.025 = %6.3f \n", critvalues_za[2]
-        printf "CV 0.05 = %6.3f \n", critvalues_za[3]
-        printf "CV 0.10 = %6.3f\n", critvalues_za[4]
-    endif
-    printf "\n"
-
-    # Assemble bundle
-    self.obs_ids = obs_ids
-    self.tstatistics_adf = stats_adf
-    self.tstatistics_zt = stats_zt
-    self.tstatistics_za = stats_za
-    self.lag_adf = lag
-
-    self.tstat_adf = tstat_adf
-    self.tstat_zt = tstat_zt
-    self.tstat_za = tstat_za
-
-    self.breakpoint_pct_adf = breakpoint_pct_adf
-    self.breakpoint_pct_zt = breakpoint_pct_zt
-    self.breakpoint_pct_za = breakpoint_pct_za
-
-    self.breakpoint_obsnum_adf = breakpoint_obsnum_adf
-    self.breakpoint_obsnum_zt = breakpoint_obsnum_zt
-    self.breakpoint_obsnum_za = breakpoint_pct_za
-
-    self.breakpoint_obslabel_adf = obslabel(breakpoint_obsnum_adf)
-    self.breakpoint_obslabel_zt = obslabel(breakpoint_obsnum_zt)
-    self.breakpoint_obslabel_za = obslabel(breakpoint_obsnum_za)
-
-    self.critvalues_adf = critvalues_adf
-    self.critvalues_zt = critvalues_adf
-    self.critvalues_za = critvalues_za
-
-    return self
+    printf "\n====================================================\n"
 end function
 
 
@@ -312,14 +396,12 @@ function void plotGH (const bundle self "Bundle returned by estimateGH",
 
     string filename = exists(filename) ? filename : "display"
 
-    filename
-
     matrix mplot = self.tstatistics_adf ~ self.tstatistics_za ~ \
         self.tstatistics_zt ~ self.obs_ids
     cnameset(mplot, defarray("ADF*", "Za", "Zt", "Sample"))
 
     plot mplot
-        options with-lp #time-series
+        options with-lp
         literal set title "Regime shifts using ADF*, Za or Zt tests"
         literal set key outside below
     end plot --output="@filename"

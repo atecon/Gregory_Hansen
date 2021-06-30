@@ -1,5 +1,5 @@
-Package for testing for cointegration with regime-shifts using a single-equation
-model.
+Package for testing for cointegration with regime-shifts using a
+single-equation model.
 
 Reference:
 Allan W. Gregory and Bruce E. Hansen (1996):"Residual-based tests for
@@ -7,10 +7,10 @@ cointegration in models with regime shifts", Journal of Econometrics
 URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
 
 
-
-estimateGH(const matrix y, const matrix x, int model[1::], int choice[1::], int k[1::])
-==================================================================================
-Main public function for estimating the model. Returns a bundle with various
+estimateGH(const matrix y, const matrix x, int model[1::],
+           int choice[1::], int k[1::])
+======================================================================
+Public function for estimating the model. Returns a bundle with various
 information.
 
 Parameters:
@@ -26,7 +26,7 @@ choice     - int, Information criteria for ADF lag-selection:
              = 2: AIC-chosen AR lag
              = 3: BIC-chosen AR lag
              = 4: Downward-t-chosen AR lag
-k          - int, maximum lag for ADF test
+adf_maxlag  - int, maximum lag for ADF test
 
 Return:
 --------
@@ -55,14 +55,14 @@ breakpoint_obslabel_zt : Date of break of breakpoint of Zt test
 
 
 plotGH(const bundle self, string filename[null])
-==================================================================================
+========================================================================
 Plot estimated test statistics for each sample considered.
 
 Parameters:
 -----------
 self       - bundle, Bundle returned by estimateGH()
-filename   - string, Full path and filename for storing plot (default: plot
-             appears immediately at screen)
+filename   - string, Full path and filename for storing plot
+             (default: plot appears immediately at screen)
 
 Return:
 --------

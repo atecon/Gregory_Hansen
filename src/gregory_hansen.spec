@@ -1,7 +1,7 @@
 author = Artur Tarassow
 email = atecon@posteo.de
 version = 1.0
-date = 2021-06-29
+date = 2021-06-30
 description = Cointegration with regime-shifts
 tags = C53
 min-version = 2021b

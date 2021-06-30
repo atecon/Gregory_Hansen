@@ -15,6 +15,43 @@ function scalar assert_matrix_equality (matrix actual, matrix expected)
 end function
 
 
+bundles Params = null
+Params = Params + _(model = 2, choice = 1, adf_maxlag = 2)
+Params = Params + _(model = 2, choice = 2, adf_maxlag = 2)
+Params = Params + _(model = 2, choice = 3, adf_maxlag = 2)
+Params = Params + _(model = 2, choice = 4, adf_maxlag = 2)
+
+Params = Params + _(model = 3, choice = 1, adf_maxlag = 2)
+Params = Params + _(model = 3, choice = 2, adf_maxlag = 2)
+Params = Params + _(model = 3, choice = 3, adf_maxlag = 2)
+Params = Params + _(model = 3, choice = 4, adf_maxlag = 2)
+
+Params = Params + _(model = 4, choice = 1, adf_maxlag = 2)
+Params = Params + _(model = 4, choice = 2, adf_maxlag = 2)
+Params = Params + _(model = 4, choice = 3, adf_maxlag = 2)
+Params = Params + _(model = 4, choice = 4, adf_maxlag = 2)
+
+function void test_model_parameters (const bundles P, const list L)
+    print "Start testing model parameter space()."
+
+    matrix y = { L.md }                 # Endogeneous
+    matrix x = { L.ynr } ~ { L.sr }     # Exogenous
+
+    loop foreach i P
+        # Given
+        scalar model = P[i].model
+        scalar choice = P[i].choice
+        scalar adf_maxlag = P[i].adf_maxlag
+
+        print model choice adf_maxlag
+
+        # When
+        bundle Model = estimateGH(y, x, model, choice, adf_maxlag)
+    endloop
+end function
+test_model_parameters(Params, dataset)
+
+
 function void test_baseline_estimation (const list L)
     print "Start testing function name()"
 
@@ -29,8 +66,6 @@ function void test_baseline_estimation (const list L)
 
     # When
     bundle model = estimateGH(y, x, type_break, choice, k)
-    model
-
 
     expected_lag_adf = 4
     expected_tstat_adf = -4.77755
@@ -55,6 +90,31 @@ function void test_baseline_estimation (const list L)
     assert( assert_matrix_equality(model.critvalues_zt, expected_critvalues_zt) == 0)
 end function
 test_baseline_estimation(dataset)
+
+
+
+
+
+
+
+function void test_initialization (void)
+    print "Start testing function initialization()"
+
+    # Given
+    matrix y = seq(1, 3)'
+    matrix x = mshape(0, 3, 4)
+
+    # When
+    bundle actual = initialization(y, x)
+    scalar expected_T = rows(y)
+    scalar expected_n_vars = cols(x)
+
+    # Then
+    assert(actual.T == expected_T)
+    assert(actual.nX == expected_n_vars)
+end function
+test_initialization()
+
 
 
 printf "\nInfo: All tests passed.\n"

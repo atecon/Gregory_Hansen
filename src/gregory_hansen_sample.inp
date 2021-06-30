@@ -1,7 +1,7 @@
 clear
 set verbose off
-include gregory_hansen.gfn
 
+include gregory_hansen.gfn
 open joe96_data.gdt --frompkg=gregory_hansen
 
 smpl 1960:1 1990:4      # Sample selected in the original article
@@ -15,9 +15,8 @@ scalar choice = 2
 scalar k = 6
 
 # Estimation
-eval $nobs
-eval $t1 ~ $t2
 Model = estimateGH(y, x, model, choice, k)
+print Model
 
 # Plot regime shift
 plotGH(Model)
