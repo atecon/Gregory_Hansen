@@ -15,38 +15,61 @@ function scalar assert_matrix_equality (matrix actual, matrix expected)
 end function
 
 
+
+function void test_get_defaultsGH (void)
+    print "Start testing function get_defaultsGH()"
+
+    # Given
+    expected_trimming_start = 0.15
+    expected_trimming_end = 0.85
+    expected_criteria = "aic"
+    expected_model = "cs"
+    expected_adf_maxlag = 4
+
+    # When
+    bundle actual = get_defaultsGH()
+    strings keys = getkeys(actual)
+
+    # Then
+    loop foreach i keys
+        string name = sprintf("expected_%s", "$i")
+        assert(actual["$i"] == @name)
+    endloop
+end function
+test_get_defaultsGH()
+
+
 bundles Params = null
-Params = Params + _(model = 2, criteria = 1, adf_maxlag = 2)
-Params = Params + _(model = 2, criteria = 2, adf_maxlag = 2)
-Params = Params + _(model = 2, criteria = 3, adf_maxlag = 2)
-Params = Params + _(model = 2, criteria = 4, adf_maxlag = 2)
+Params = Params + _(model = "c", criteria = "fix", adf_maxlag = 2)
+Params = Params + _(model = "c", criteria = "aic", adf_maxlag = 2)
+Params = Params + _(model = "c", criteria = "bic", adf_maxlag = 2)
+Params = Params + _(model = "c", criteria = "ttest", adf_maxlag = 2)
 
-Params = Params + _(model = 3, criteria = 1, adf_maxlag = 2)
-Params = Params + _(model = 3, criteria = 2, adf_maxlag = 2)
-Params = Params + _(model = 3, criteria = 3, adf_maxlag = 2)
-Params = Params + _(model = 3, criteria = 4, adf_maxlag = 2)
+Params = Params + _(model = "ct", criteria = "fix", adf_maxlag = 2)
+Params = Params + _(model = "ct", criteria = "aic", adf_maxlag = 2)
+Params = Params + _(model = "ct", criteria = "bic", adf_maxlag = 2)
+Params = Params + _(model = "ct", criteria = "ttest", adf_maxlag = 2)
 
-Params = Params + _(model = 4, criteria = 1, adf_maxlag = 2)
-Params = Params + _(model = 4, criteria = 2, adf_maxlag = 2)
-Params = Params + _(model = 4, criteria = 3, adf_maxlag = 2)
-Params = Params + _(model = 4, criteria = 4, adf_maxlag = 2)
+Params = Params + _(model = "cs", criteria = "fix", adf_maxlag = 2)
+Params = Params + _(model = "cs", criteria = "aic", adf_maxlag = 2)
+Params = Params + _(model = "cs", criteria = "bic", adf_maxlag = 2)
+Params = Params + _(model = "cs", criteria = "ttest", adf_maxlag = 2)
+
+list L = dataset
 
 function void test_model_parameters (const bundles P, const list L)
     print "Start testing model parameter space()."
 
-    matrix y = { L.md }                 # Endogeneous
-    matrix x = { L.ynr } ~ { L.sr }     # Exogenous
+    list X = L.ynr L.sr
 
     loop foreach i P
         # Given
-        scalar model = P[i].model
-        scalar criteria = P[i].criteria
-        scalar adf_maxlag = P[i].adf_maxlag
-
-        print model criteria adf_maxlag
+        bundle params = _(model = P[i].model,\
+                          criteria = P[i].criteria,\
+                          adf_maxlag = P[i].adf_maxlag)
 
         # When
-        bundle Model = estimateGH(y, x, model, criteria, adf_maxlag)
+        bundle Model = estimateGH(L.md, X, params)
     endloop
 end function
 test_model_parameters(Params, dataset)
@@ -56,16 +79,17 @@ function void test_baseline_estimation (const list L)
     print "Start testing function name()"
 
     # Given
-    smpl 1960:1 1990:4                  # Sample selected in the original article
-    matrix y = { L.md }                 # Endogeneous
-    matrix x = { L.ynr } ~ { L.sr }     # Exogenous
+    smpl 1960:1 1990:4       # Sample selected in the original article
+    list X = L.ynr L.sr
 
-    scalar type_break = 4        # Select break-type: 2=C, 3=C/T, 4=C/S
-    scalar criteria = 2       # only for ADF*-test relevant
-    scalar k = 6            # maximum lag for ADF test
+    bundle params = _(\
+                      model = "cs",\
+                      criteria = "aic",\
+                      adf_maxlag = 6\
+                      )
 
     # When
-    bundle model = estimateGH(y, x, type_break, criteria, k)
+    bundle model = estimateGH(L.md, X, params)
 
     expected_lag_adf = 4
     expected_tstat_adf = -4.77755
@@ -93,19 +117,18 @@ test_baseline_estimation(dataset)
 
 
 
-
-
-
-
 function void test_initialization (void)
     print "Start testing function initialization()"
 
     # Given
     matrix y = seq(1, 3)'
     matrix x = mshape(0, 3, 4)
+    bundle actual = _(trimming_start = 0.15,\
+                      trimming_end = 0.85)
+
 
     # When
-    bundle actual = initialization(y, x)
+    initialization(y, x, &actual)
     scalar expected_T = rows(y)
     scalar expected_n_vars = cols(x)
 

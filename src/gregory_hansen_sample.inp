@@ -6,21 +6,23 @@ open joe96_data.gdt --frompkg=gregory_hansen
 
 smpl 1960:1 1990:4      # Sample selected in the original article
 
-matrix y = { md }   # Endogeneous
-matrix x = { ynr } ~ { sr } # Exogenous
+list L = ynr sr
 
-# Model parameters
-scalar model = 2
-scalar criteria = 2
-scalar k = 6
+# Estimation with default parameters
+bundle DefaultModel = estimateGH(md, L)
+print DefaultModel
 
-# Estimation
-Model = estimateGH(y, x, model, criteria, k)
+
+# Alternatively, select your own model parameters
+bundle params = _(model = "c", criteria = "ttest", adf_maxlag = 6)
+
+Model = estimateGH(md, L, params)
 print Model
 
 # Plot regime shift
 plotGH(Model)
 
+
 # Engle-Granger test on cointegration
-coint k md ynr sr --test-down --skip-df
-coint k md ynr sr --ct --test-down --skip-df
+coint 6 md ynr sr --test-down --skip-df
+coint 6 md ynr sr --ct --test-down --skip-df

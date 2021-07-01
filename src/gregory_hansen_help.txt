@@ -7,26 +7,41 @@ cointegration in models with regime shifts", Journal of Econometrics
 URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
 
 
-estimateGH(const matrix y, const matrix x, int model[1::],
-           int criteria[1::], int k[1::])
+estimateGH(const series y, const list x, bundle params[null])
 ======================================================================
 Public function for estimating the model. Returns a bundle with various
 information.
 
 Parameters:
 -----------
-y          - matrix, T by 1 vector of dependent variable
-x          - matrix, T by k matrix with independent variables
-model      - int, Choice for model:
-             = 2: break in intercept
-             = 3: break in intercept and linear trend
-             = 4: break in intercept and slope coefficients
-criteria     - int, Information criteria for ADF lag-selection:
-             = 1: pre-specified AR lag
-             = 2: AIC-chosen AR lag
-             = 3: BIC-chosen AR lag
-             = 4: Downward-t-chosen AR lag
-adf_maxlag  - int, maximum lag for ADF test
+y          - series, dependent variable
+x          - list, exogenous variables
+params     - bundle, optional paramters for test (optional). The user can
+             set the following parameters:
+
+         model:       string, name of a regime-shift model (default: "c")
+            "linear": no break(s) at all
+            "c":      break in intercept
+            "ct":     break in intercept and linear trend
+            "cs":     break in intercept and slope coefficients
+
+         criteria: string, Name of information criteria for ADF
+                   lag-selection (default: "aic"):
+            "fix":   pre-specified AR lag
+            "aic":   AIC-chosen AR lag
+            "bic":   BIC-chosen AR lag
+            "ttest": Downward-t-chosen AR lag
+
+         adf_maxlag: int, maximum lag for ADF test (default: equal to
+                     frequency of active time-series dataset)
+
+         trimming_start: scalar, Fraction of sample start not used for
+                         searching for a break [greater (smaller) than
+                         0 (1)] (default:0.15)
+
+         trimming_end: scalar, Fraction of sample end not used for
+                         searching for a break [greater (smaller) than
+                         0 (1)] (default:0.85)
 
 Return:
 --------
@@ -34,6 +49,10 @@ bundle, including various estimation results:
 
 obs_ids            : Vector of observation IDs used for testing over the trimmed
                      sample
+
+T                  : Number of valid observations used
+t1                 : Index value of initial sample observation
+t2                 : Index value of last sample observation
 
 lag_adf            : Determined lag length of the ADF* test
 
@@ -72,6 +91,7 @@ Nothing.
 # CHANGELOG
 -----------
 1.0 (June 2021)
+   - completely new user-interface
    - rename public function from main() to estimateGH()
    - add new public function for plotting breakpoints, plotGH()
    - improved naming of returned variables

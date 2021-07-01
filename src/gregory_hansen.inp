@@ -35,18 +35,18 @@ function bundle adftest (const matrix x,
         matrix uhat = Model.e
         matrix se = Model.se
 
-        if self.criteria == 1  # K is pre-specified
+        if self.criteria == "fix"           # K is pre-specified
             stats_adf[start] = -1000   # set a random negative constant #
             lags_adf[start] = bhat[1] / se[1]
             break
 
-        elif self.criteria == 2  # K is determined by AIC #
+        elif self.criteria == "aic"  # K is determined by AIC #
             ic = ln(uhat'uhat / n1) + 2 * (adf_maxlag + 2) / n1
 
-        elif self.criteria == 3  # K is determined by BIC #
+        elif self.criteria == "bic"  # K is determined by BIC #
             ic = ln(uhat'uhat / n1) + (adf_maxlag + 2) * ln(n1) / n1
 
-        elif self.criteria == 4 # K is determined by downward t #
+        elif self.criteria == "ttest" # K is determined by downward t #
             if abs(bhat[start] / se[start]) >= 1.96 || adf_maxlag == 0
                 stats_adf[start] = -1000    # set a random negative constant
                 lags_adf[start] = bhat[1] / se[1]
@@ -69,20 +69,20 @@ end function
 
 
 function matrix critza (const int m[1::] "number of regressors",
-                        const int model[1::] "1:C, 2:C/T, 3:C/S")
+                        const string model)
     /* Critical values for ZA test. */
 
     matrix RET = {}
 
     # TODO: What about model == 1?
 
-    if model == 2
+    if model == "c"
         matrix CRIT_C = { -50.07 , -45.01 , -40.48 , -36.19 ; -57.01 , -51.41 , -46.98 , -42.49 ; -63.64 , -57.96 , -53.58 , -48.65 ; -70.18 , -64.41 , -59.40 , -54.38 }
         matrix RET = CRIT_C[m,]
-    elif model == 3
+    elif model == "ct"
         matrix CRIT_CT = { -57.28 , -52.09 , -47.96 , -43.22 ; -64.77 , -58.57 , -53.92 , -48.94 ; -70.27 , -64.26 , -59.76 , -54.94 ; -76.95 , -70.45 , -65.44 , -60.12 }
         matrix RET = CRIT_CT[m,]
-    elif model == 4
+    elif model == "cs"
         matrix CRIT_CS = { -57.17 , -51.32 , -47.04 , -41.85 ; -68.21 , -63.28 , -58.33 , -52.85 ; -80.15 , -73.91 , -68.94 , -63.42 ; -90.35 , -84.00 , -78.52 , -72.56 }
         matrix RET = CRIT_CS[m,]
     endif
@@ -94,20 +94,20 @@ end function
 
 
 function matrix critadfzt (const int m[1::] "number of regressors",
-                           const int model[1::] "2:C, 3:C/T, 4:C/S")
+                           const string model)
     /* Critical values for ADF-ZT test. */
 
     matrix RET = {}
 
     # TODO: What about model == 1?
 
-    if model == 2
+    if model == "c"
         matrix CRIT_C = { -5.13 , -4.83 , -4.61 , -4.34 ; -5.44 , -5.16 , -4.92 , -4.69 ; -5.77 , -5.50 , -5.28 , -5.02 ; -6.05 , -5.80 , -5.56 , -5.31 }
         matrix RET = CRIT_C[m,]
-    elif model == 3
+    elif model == "ct"
         matrix CRIT_CT = { -5.45 , -5.21 , -4.99 , -4.72 ; -5.80 , -5.51 , -5.29 , -5.03 ; -6.05 , -5.79 , -5.57 , -5.33 ; -6.36 , -6.07 , -5.83 , -5.59 }
         matrix RET = CRIT_CT[m,]
-    elif model == 4
+    elif model == "cs"
         matrix CRIT_CS = { -5.47 , -5.19 , -4.95 , -4.68 ; -5.97 , -5.73 , -5.50 , -5.23 ; -6.51 , -6.23 , -6.00 , -5.75 ; -6.92 , -6.64 , -6.41 , -6.17 }
         RET = CRIT_CS[m,]
     endif
@@ -178,19 +178,20 @@ function bundle phillips (const matrix y,
 end function
 
 
-function bundle initialization (const matrix y, const matrix x)
+function void initialization (const matrix y,
+                              const matrix x,
+                              bundle *self)
     /* Initialize parameters.
     return: bundle */
-
-    bundle self
 
     matrix self.y = y
     matrix self.x = x
 
     scalar self.T = rows(y)
     scalar self.nX = cols(x)
-    scalar self.begin = round(0.15 * self.T)
-    scalar self.final = round(0.85 * self.T)
+
+    scalar self.begin = round(self.trimming_start * self.T)
+    scalar self.final = round(self.trimming_end * self.T)
     scalar self.t = self.begin
     matrix self.obs_ids = seq(self.begin, self.final)'
 
@@ -198,8 +199,22 @@ function bundle initialization (const matrix y, const matrix x)
     matrix self.lags_adf = self.stats_adf
     matrix self.stats_za = self.stats_adf
     matrix self.stats_zt = self.stats_adf
+end function
 
-    return self
+
+function bundle get_defaultsGH (void)
+    /* Set default parameter
+    return: bundle, default parameter*/
+
+    bundle B = _(\
+                 trimming_start = 0.15,\
+                 trimming_end = 0.85,\
+                 criteria = "aic",\
+                 model = "cs",\
+                 adf_maxlag = $pd\
+                )
+
+    return B
 end function
 
 
@@ -210,17 +225,17 @@ function matrix compile_regressors (const bundle self,
 
     matrix dummy = zeros(t, 1) | ones((self.T - t), 1)
 
-    if self.model == 1
+    if self.model == "linear"
         matrix z = self.x
     else
         matrix z = ones(self.T, 1) ~ dummy
     endif
 
-    if self.model == 2           # break in intercept
+    if self.model == "c"           # break in intercept
         z ~= self.x
-    elif self.model == 3         # break in intercept and trend
+    elif self.model == "ct"         # break in intercept and linear trend
         z ~= seq(1, self.T)' ~ self.x
-    elif self.model == 4         # break in intercept and slope
+    elif self.model == "cs"         # break in intercept and slopes
         z ~= self.x ~ dummy .* self.x
     endif
 
@@ -228,18 +243,22 @@ function matrix compile_regressors (const bundle self,
 end function
 
 
-function bundle estimateGH (const matrix y,
-                            const matrix x,
-                            int model[2::],
-                            int criteria[1::],
-                            int adf_maxlag[1::])
+function bundle estimateGH (const series endog,
+                            const list X,
+                            bundle params[null])
     /* Estimate model and return results. */
 
+    list L = endog X
+    smpl L --contiguous
+
+    if !exists(params)
+        bundle params = null
+    endif
+    bundle self = params + get_defaultsGH()
+    initialization({endog}, {X}, &self)
+
     bundle Ret = null
-    bundle self = initialization(y, x)
-    self.model = model
-    self.criteria = criteria
-    self.adf_maxlag = adf_maxlag
+
 
     scalar t = self.t
 
@@ -254,20 +273,19 @@ function bundle estimateGH (const matrix y,
         self.stats_adf[idx] = Adf.tstat
         self.lags_adf[idx] = Adf.optimal_lag
 
-        bundle p = phillips(y, z)
+        bundle p = phillips(self.y, z)
         self.stats_za[idx] = p.tstat_za
         self.stats_zt[idx] = p.tstat_zt
 
         t++
     endloop
 
-
     matrix critvalues_adf, critvalues_za, critvalues_zt
 
     if self.nX <= 4
-        matrix Ret.critvalues_adf = critadfzt(self.nX, model)
+        matrix Ret.critvalues_adf = critadfzt(self.nX, self.model)
         matrix Ret.critvalues_zt = Ret.critvalues_adf
-        matrix Ret.critvalues_za = critza(self.nX, model)
+        matrix Ret.critvalues_za = critza(self.nX, self.model)
     endif
 
 
@@ -291,9 +309,11 @@ function bundle estimateGH (const matrix y,
     Ret.nX = self.nX
     Ret.T = self.T
     Ret.obs_ids = self.obs_ids
-    Ret.model = model
-    Ret.criteria = criteria
-    Ret.adf_maxlag = adf_maxlag
+    Ret.t1 = $t1
+    Ret.t2 = $t2
+    Ret.model = self.model
+    Ret.criteria = self.criteria
+    Ret.adf_maxlag = self.adf_maxlag
 
     Ret.tstatistics_adf = self.stats_adf
     Ret.tstatistics_zt = self.stats_zt
@@ -303,34 +323,36 @@ function bundle estimateGH (const matrix y,
     Ret.breakpoint_obslabel_zt = obslabel(Ret.breakpoint_obsnum_zt)
     Ret.breakpoint_obslabel_za = obslabel(Ret.breakpoint_obsnum_za)
 
-
     printGH(Ret)
 
     return Ret
 end function
 
 
-function string get_model_description (const int model[2:4:])
+function string get_model_description (const string model)
+    /* */
 
-    if model == 2
+    if model == "c"
         return "Break in intercept"
-    elif model == 3
+    elif model == "ct"
         return "Break in intercept and linear trend"
-    elif model == 4
+    elif model == "cs"
         return "Break in intercept and slope coefficients"
     endif
 end function
 
-function string get_criteria_description (const int criteria[1:4:])
 
-    if criteria == 1
+function string get_criteria_description (const string criteria)
+    /* */
+
+    if criteria == "fix"
         return "Pre-specified AR lag"
-    elif criteria == 2
+    elif criteria == "aic"
         return "AIC-chosen AR lag"
-    elif criteria == 3
+    elif criteria == "bic"
         return "BIC-chosen AR lag"
-    elif criteria == 4
-        return "Downward-t-chosen AR lag"
+    elif criteria == "ttest"
+        return "Downward t-chosen AR lag"
     endif
 end function
 
@@ -342,6 +364,8 @@ function void printGH (const bundle self)
     printf "\n====================================================\n"
     printf "*** Gregory-Hansen cointegration test results ***\n\n"
 
+    printf "Sample (before trimming): %s - %s (T = %d)\n",\
+        obslabel(self.t1), obslabel(self.t2), self.T
     printf "Model type:       %s\n", get_model_description(self.model)
     printf "Maximum AR lag:   %d\n", self.adf_maxlag
     printf "Lag-selection:    %s\n\n", get_criteria_description(self.criteria)
@@ -383,7 +407,6 @@ function void printGH (const bundle self)
         printf "CV 0.05 =           %6.3f \n", self.critvalues_za[3]
         printf "CV 0.10 =           %6.3f\n", self.critvalues_za[4]
     endif
-    printf "\n"
 
     printf "\n====================================================\n"
 end function

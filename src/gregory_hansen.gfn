@@ -16,26 +16,41 @@ cointegration in models with regime shifts&quot;, Journal of Econometrics
 URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
 
 
-estimateGH(const matrix y, const matrix x, int model[1::],
-           int criteria[1::], int k[1::])
+estimateGH(const series y, const list x, bundle params[null])
 ======================================================================
 Public function for estimating the model. Returns a bundle with various
 information.
 
 Parameters:
 -----------
-y          - matrix, T by 1 vector of dependent variable
-x          - matrix, T by k matrix with independent variables
-model      - int, Choice for model:
-             = 2: break in intercept
-             = 3: break in intercept and linear trend
-             = 4: break in intercept and slope coefficients
-criteria     - int, Information criteria for ADF lag-selection:
-             = 1: pre-specified AR lag
-             = 2: AIC-chosen AR lag
-             = 3: BIC-chosen AR lag
-             = 4: Downward-t-chosen AR lag
-adf_maxlag  - int, maximum lag for ADF test
+y          - series, dependent variable
+x          - list, exogenous variables
+params     - bundle, optional paramters for test (optional). The user can
+             set the following parameters:
+
+         model:       string, name of a regime-shift model (default: &quot;c&quot;)
+            &quot;linear&quot;: no break(s) at all
+            &quot;c&quot;:      break in intercept
+            &quot;ct&quot;:     break in intercept and linear trend
+            &quot;cs&quot;:     break in intercept and slope coefficients
+
+         criteria: string, Name of information criteria for ADF
+                   lag-selection (default: &quot;aic&quot;):
+            &quot;fix&quot;:   pre-specified AR lag
+            &quot;aic&quot;:   AIC-chosen AR lag
+            &quot;bic&quot;:   BIC-chosen AR lag
+            &quot;ttest&quot;: Downward-t-chosen AR lag
+
+         adf_maxlag: int, maximum lag for ADF test (default: equal to
+                     frequency of active time-series dataset)
+
+         trimming_start: scalar, Fraction of sample start not used for
+                         searching for a break [greater (smaller) than
+                         0 (1)] (default:0.15)
+
+         trimming_end: scalar, Fraction of sample end not used for
+                         searching for a break [greater (smaller) than
+                         0 (1)] (default:0.85)
 
 Return:
 --------
@@ -43,6 +58,10 @@ bundle, including various estimation results:
 
 obs_ids            : Vector of observation IDs used for testing over the trimmed
                      sample
+
+T                  : Number of valid observations used
+t1                 : Index value of initial sample observation
+t2                 : Index value of last sample observation
 
 lag_adf            : Determined lag length of the ADF* test
 
@@ -81,6 +100,7 @@ Nothing.
 # CHANGELOG
 -----------
 1.0 (June 2021)
+   - completely new user-interface
    - rename public function from main() to estimateGH()
    - add new public function for plotting breakpoints, plotGH()
    - improved naming of returned variables
@@ -97,19 +117,20 @@ Nothing.
 <data-files count="1">
 joe96_data.gdt </data-files>
 <gretl-function name="estimateGH" type="bundle">
- <params count="5">
-  <param name="y" type="matrix" const="true"/>
-  <param name="x" type="matrix" const="true"/>
-  <param name="model" type="int" min="2"/>
-  <param name="criteria" type="int" min="1"/>
-  <param name="adf_maxlag" type="int" min="1"/>
+ <params count="3">
+  <param name="endog" type="series" const="true"/>
+  <param name="X" type="list" const="true"/>
+  <param name="params" type="bundle" optional="true"/>
  </params>
 <code>/* Estimate model and return results. */
+list L = endog X
+smpl L --contiguous
+if !exists(params)
+  bundle params = null
+endif
+bundle self = params + get_defaultsGH()
+initialization({endog}, {X}, &amp;self)
 bundle Ret = null
-bundle self = initialization(y, x)
-self.model = model
-self.criteria = criteria
-self.adf_maxlag = adf_maxlag
 scalar t = self.t
 # Loop over different samples
 loop while t &lt;= self.final -q
@@ -118,16 +139,16 @@ loop while t &lt;= self.final -q
   bundle Adf = adftest(z, self)
   self.stats_adf[idx] = Adf.tstat
   self.lags_adf[idx] = Adf.optimal_lag
-  bundle p = phillips(y, z)
+  bundle p = phillips(self.y, z)
   self.stats_za[idx] = p.tstat_za
   self.stats_zt[idx] = p.tstat_zt
   t++
 endloop
 matrix critvalues_adf, critvalues_za, critvalues_zt
 if self.nX &lt;= 4
-  matrix Ret.critvalues_adf = critadfzt(self.nX, model)
+  matrix Ret.critvalues_adf = critadfzt(self.nX, self.model)
   matrix Ret.critvalues_zt = Ret.critvalues_adf
-  matrix Ret.critvalues_za = critza(self.nX, model)
+  matrix Ret.critvalues_za = critza(self.nX, self.model)
 endif
 # Prepare results
 scalar Ret.tstat_adf = minc(self.stats_adf)
@@ -145,9 +166,11 @@ scalar Ret.breakpoint_obsnum_zt = self.obs_ids[iminc(self.stats_zt)]
 Ret.nX = self.nX
 Ret.T = self.T
 Ret.obs_ids = self.obs_ids
-Ret.model = model
-Ret.criteria = criteria
-Ret.adf_maxlag = adf_maxlag
+Ret.t1 = $t1
+Ret.t2 = $t2
+Ret.model = self.model
+Ret.criteria = self.criteria
+Ret.adf_maxlag = self.adf_maxlag
 Ret.tstatistics_adf = self.stats_adf
 Ret.tstatistics_zt = self.stats_zt
 Ret.tstatistics_za = self.stats_za
@@ -209,15 +232,15 @@ loop while adf_maxlag &gt;= 0 -q
   matrix bhat = Model.bhat
   matrix uhat = Model.e
   matrix se = Model.se
-  if self.criteria == 1  # K is pre-specified
+  if self.criteria == &quot;fix&quot;           # K is pre-specified
     stats_adf[start] = -1000   # set a random negative constant #
     lags_adf[start] = bhat[1] / se[1]
     break
-  elif self.criteria == 2  # K is determined by AIC #
+  elif self.criteria == &quot;aic&quot;  # K is determined by AIC #
     ic = ln(uhat'uhat / n1) + 2 * (adf_maxlag + 2) / n1
-  elif self.criteria == 3  # K is determined by BIC #
+  elif self.criteria == &quot;bic&quot;  # K is determined by BIC #
     ic = ln(uhat'uhat / n1) + (adf_maxlag + 2) * ln(n1) / n1
-  elif self.criteria == 4 # K is determined by downward t #
+  elif self.criteria == &quot;ttest&quot; # K is determined by downward t #
     if abs(bhat[start] / se[start]) &gt;= 1.96 || adf_maxlag == 0
       stats_adf[start] = -1000    # set a random negative constant
       lags_adf[start] = bhat[1] / se[1]
@@ -239,20 +262,18 @@ return B
   <param name="m" type="int" min="1" const="true">
 <description>number of regressors</description>
   </param>
-  <param name="model" type="int" min="1" const="true">
-<description>1:C, 2:C/T, 3:C/S</description>
-  </param>
+  <param name="model" type="string" const="true"/>
  </params>
 <code>/* Critical values for ZA test. */
 matrix RET = {}
 # TODO: What about model == 1?
-if model == 2
+if model == &quot;c&quot;
   matrix CRIT_C = { -50.07 , -45.01 , -40.48 , -36.19 ; -57.01 , -51.41 , -46.98 , -42.49 ; -63.64 , -57.96 , -53.58 , -48.65 ; -70.18 , -64.41 , -59.40 , -54.38 }
   matrix RET = CRIT_C[m,]
-elif model == 3
+elif model == &quot;ct&quot;
   matrix CRIT_CT = { -57.28 , -52.09 , -47.96 , -43.22 ; -64.77 , -58.57 , -53.92 , -48.94 ; -70.27 , -64.26 , -59.76 , -54.94 ; -76.95 , -70.45 , -65.44 , -60.12 }
   matrix RET = CRIT_CT[m,]
-elif model == 4
+elif model == &quot;cs&quot;
   matrix CRIT_CS = { -57.17 , -51.32 , -47.04 , -41.85 ; -68.21 , -63.28 , -58.33 , -52.85 ; -80.15 , -73.91 , -68.94 , -63.42 ; -90.35 , -84.00 , -78.52 , -72.56 }
   matrix RET = CRIT_CS[m,]
 endif
@@ -265,20 +286,18 @@ return RET
   <param name="m" type="int" min="1" const="true">
 <description>number of regressors</description>
   </param>
-  <param name="model" type="int" min="1" const="true">
-<description>2:C, 3:C/T, 4:C/S</description>
-  </param>
+  <param name="model" type="string" const="true"/>
  </params>
 <code>/* Critical values for ADF-ZT test. */
 matrix RET = {}
 # TODO: What about model == 1?
-if model == 2
+if model == &quot;c&quot;
   matrix CRIT_C = { -5.13 , -4.83 , -4.61 , -4.34 ; -5.44 , -5.16 , -4.92 , -4.69 ; -5.77 , -5.50 , -5.28 , -5.02 ; -6.05 , -5.80 , -5.56 , -5.31 }
   matrix RET = CRIT_C[m,]
-elif model == 3
+elif model == &quot;ct&quot;
   matrix CRIT_CT = { -5.45 , -5.21 , -4.99 , -4.72 ; -5.80 , -5.51 , -5.29 , -5.03 ; -6.05 , -5.79 , -5.57 , -5.33 ; -6.36 , -6.07 , -5.83 , -5.59 }
   matrix RET = CRIT_CT[m,]
-elif model == 4
+elif model == &quot;cs&quot;
   matrix CRIT_CS = { -5.47 , -5.19 , -4.95 , -4.68 ; -5.97 , -5.73 , -5.50 , -5.23 ; -6.51 , -6.23 , -6.00 , -5.75 ; -6.92 , -6.64 , -6.41 , -6.17 }
   RET = CRIT_CS[m,]
 endif
@@ -340,27 +359,33 @@ matrix tstat_zt = (p - 1) / sqrt(s)
 return _(tstat_za, tstat_zt)
 </code>
 </gretl-function>
-<gretl-function name="initialization" type="bundle" private="1">
- <params count="2">
+<gretl-function name="initialization" type="void" private="1">
+ <params count="3">
   <param name="y" type="matrix" const="true"/>
   <param name="x" type="matrix" const="true"/>
+  <param name="self" type="bundleref"/>
  </params>
 <code>/* Initialize parameters.
 return: bundle */
-bundle self
 matrix self.y = y
 matrix self.x = x
 scalar self.T = rows(y)
 scalar self.nX = cols(x)
-scalar self.begin = round(0.15 * self.T)
-scalar self.final = round(0.85 * self.T)
+scalar self.begin = round(self.trimming_start * self.T)
+scalar self.final = round(self.trimming_end * self.T)
 scalar self.t = self.begin
 matrix self.obs_ids = seq(self.begin, self.final)'
 matrix self.stats_adf = zeros((self.final - self.begin + 1), 1)
 matrix self.lags_adf = self.stats_adf
 matrix self.stats_za = self.stats_adf
 matrix self.stats_zt = self.stats_adf
-return self
+</code>
+</gretl-function>
+<gretl-function name="get_defaultsGH" type="bundle" private="1">
+<code>/* Set default parameter
+return: bundle, default parameter*/
+bundle B = _( trimming_start = 0.15, trimming_end = 0.85, criteria = &quot;aic&quot;, model = &quot;cs&quot;, adf_maxlag = $pd )
+return B
 </code>
 </gretl-function>
 <gretl-function name="compile_regressors" type="matrix" private="1">
@@ -371,16 +396,16 @@ return self
 <code>/* Compile matrix of regressors
 return: type, description */
 matrix dummy = zeros(t, 1) | ones((self.T - t), 1)
-if self.model == 1
+if self.model == &quot;linear&quot;
   matrix z = self.x
 else
   matrix z = ones(self.T, 1) ~ dummy
 endif
-if self.model == 2           # break in intercept
+if self.model == &quot;c&quot;           # break in intercept
   z ~= self.x
-elif self.model == 3         # break in intercept and trend
+elif self.model == &quot;ct&quot;         # break in intercept and linear trend
   z ~= seq(1, self.T)' ~ self.x
-elif self.model == 4         # break in intercept and slope
+elif self.model == &quot;cs&quot;         # break in intercept and slopes
   z ~= self.x ~ dummy .* self.x
 endif
 return z
@@ -388,29 +413,31 @@ return z
 </gretl-function>
 <gretl-function name="get_model_description" type="string" private="1">
  <params count="1">
-  <param name="model" type="int" min="2" max="4" const="true"/>
+  <param name="model" type="string" const="true"/>
  </params>
-<code>if model == 2
+<code>/* */
+if model == &quot;c&quot;
   return &quot;Break in intercept&quot;
-elif model == 3
+elif model == &quot;ct&quot;
   return &quot;Break in intercept and linear trend&quot;
-elif model == 4
+elif model == &quot;cs&quot;
   return &quot;Break in intercept and slope coefficients&quot;
 endif
 </code>
 </gretl-function>
 <gretl-function name="get_criteria_description" type="string" private="1">
  <params count="1">
-  <param name="criteria" type="int" min="1" max="4" const="true"/>
+  <param name="criteria" type="string" const="true"/>
  </params>
-<code>if criteria == 1
+<code>/* */
+if criteria == &quot;fix&quot;
   return &quot;Pre-specified AR lag&quot;
-elif criteria == 2
+elif criteria == &quot;aic&quot;
   return &quot;AIC-chosen AR lag&quot;
-elif criteria == 3
+elif criteria == &quot;bic&quot;
   return &quot;BIC-chosen AR lag&quot;
-elif criteria == 4
-  return &quot;Downward-t-chosen AR lag&quot;
+elif criteria == &quot;ttest&quot;
+  return &quot;Downward t-chosen AR lag&quot;
 endif
 </code>
 </gretl-function>
@@ -422,6 +449,7 @@ endif
 return: nothing */
 printf &quot;\n====================================================\n&quot;
 printf &quot;*** Gregory-Hansen cointegration test results ***\n\n&quot;
+printf &quot;Sample (before trimming): %s - %s (T = %d)\n&quot;, obslabel(self.t1), obslabel(self.t2), self.T
 printf &quot;Model type:       %s\n&quot;, get_model_description(self.model)
 printf &quot;Maximum AR lag:   %d\n&quot;, self.adf_maxlag
 printf &quot;Lag-selection:    %s\n\n&quot;, get_criteria_description(self.criteria)
@@ -456,7 +484,6 @@ if self.nX &lt;= 4
   printf &quot;CV 0.05 =           %6.3f \n&quot;, self.critvalues_za[3]
   printf &quot;CV 0.10 =           %6.3f\n&quot;, self.critvalues_za[4]
 endif
-printf &quot;\n&quot;
 printf &quot;\n====================================================\n&quot;
 </code>
 </gretl-function>
@@ -469,24 +496,26 @@ open joe96_data.gdt --frompkg=gregory_hansen
 
 smpl 1960:1 1990:4      # Sample selected in the original article
 
-matrix y = { md }   # Endogeneous
-matrix x = { ynr } ~ { sr } # Exogenous
+list L = ynr sr
 
-# Model parameters
-scalar model = 2
-scalar criteria = 2
-scalar k = 6
+# Estimation with default parameters
+bundle DefaultModel = estimateGH(md, L)
+print DefaultModel
 
-# Estimation
-Model = estimateGH(y, x, model, criteria, k)
+
+# Alternatively, select your own model parameters
+bundle params = _(model = &quot;c&quot;, criteria = &quot;ttest&quot;, adf_maxlag = 6)
+
+Model = estimateGH(md, L, params)
 print Model
 
 # Plot regime shift
 plotGH(Model)
 
+
 # Engle-Granger test on cointegration
-coint k md ynr sr --test-down --skip-df
-coint k md ynr sr --ct --test-down --skip-df
+coint 6 md ynr sr --test-down --skip-df
+coint 6 md ynr sr --ct --test-down --skip-df
 </sample-script>
 </gretl-function-package>
 </gretl-functions>
