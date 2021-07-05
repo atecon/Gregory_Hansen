@@ -9,9 +9,9 @@ function scalar assert_matrix_equality (matrix actual, matrix expected)
     /* Assert element-wise equality.
     return: int, summed differences; zero value implies "any"-equality  */
 
-    d = abs(vec(actual)) .- abs(vec(expected))
+    matrix d = abs(vec(actual)) .- abs(vec(expected))
 
-    return sum(d)
+    return d
 end function
 
 
@@ -114,6 +114,30 @@ function void test_baseline_estimation (const list L)
     assert( assert_matrix_equality(model.critvalues_zt, expected_critvalues_zt) == 0)
 end function
 test_baseline_estimation(dataset)
+
+
+
+function void test_estimation_single_series (const list L)
+    print "Start testing function name()"
+
+    # Given
+    smpl 1960:1 1990:4       # Sample selected in the original article
+    list X = L.ynr
+
+    bundle params = _(\
+                      model = "cs",\
+                      criteria = "aic",\
+                      adf_maxlag = 3\
+                      )
+
+    # When
+    bundle model = estimateGH(L.md, X, params)
+
+    # Then
+    assert(model.nX == nelem(X))
+    assert(model.adf_maxlag == params.adf_maxlag)
+end function
+test_estimation_single_series(dataset)
 
 
 

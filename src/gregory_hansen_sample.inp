@@ -21,8 +21,3 @@ print Model
 
 # Plot regime shift
 plotGH(Model)
-
-
-# Engle-Granger test on cointegration
-coint 6 md ynr sr --test-down --skip-df
-coint 6 md ynr sr --ct --test-down --skip-df

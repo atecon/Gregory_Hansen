@@ -3,7 +3,7 @@
 <gretl-function-package name="gregory_hansen" needs-time-series-data="true" minver="2021b" lives-in-subdir="true">
 <author email="atecon@posteo.de">Artur Tarassow</author>
 <version>1.0</version>
-<date>2021-06-30</date>
+<date>2021-07-05</date>
 <description>Cointegration with regime-shifts</description>
 <tags>C53</tags>
 <help>
@@ -314,8 +314,12 @@ return RET
 bundle B
 matrix e, vcv
 matrix B.bhat = mols(y, x, &amp;e, &amp;vcv)
-matrix B.sigma = (e'e) / (rows(y) - cols(x))
-matrix B.se = sqrt(diag(vcv) * B.sigma)
+matrix m = diag(vcv)
+if cols(x) &gt; 1
+  matrix B.sigma = (e'e) / (rows(y) - cols(x))
+  m *= B.sigma
+endif
+matrix B.se = sqrt(m)
 B.e = e
 return B
 </code>
@@ -511,11 +515,6 @@ print Model
 
 # Plot regime shift
 plotGH(Model)
-
-
-# Engle-Granger test on cointegration
-coint 6 md ynr sr --test-down --skip-df
-coint 6 md ynr sr --ct --test-down --skip-df
 </sample-script>
 </gretl-function-package>
 </gretl-functions>
