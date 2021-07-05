@@ -125,12 +125,7 @@ function bundle run_ols (const matrix y,
     matrix e, vcv
 
     matrix B.bhat = mols(y, x, &e, &vcv)
-    matrix m = diag(vcv)
-    if cols(x) > 1
-        matrix B.sigma = (e'e) / (rows(y) - cols(x))
-        m *= B.sigma
-    endif
-    matrix B.se = sqrt(m)
+    matrix B.se = sqrt(diag(vcv))
     B.e = e
 
     return B
