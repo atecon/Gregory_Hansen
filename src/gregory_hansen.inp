@@ -160,8 +160,8 @@ function bundle phillips (const matrix y,
     loop while j <= m -q
         matrix gama = ue[1:nu-j]'ue[j+1:nu] / nu
         scalar c = j / m
-        scalar w = (75 / (6 * pi * c)^2 ) * \
-                    ( sin(1.2 * pi * c) / (1.2 * pi * c) - cos(1.2 * pi * c) )
+        scalar w = (75 / (6 * $pi * c)^2 ) * \
+                    ( sin(1.2 * $pi * c) / (1.2 * $pi * c) - cos(1.2 * $pi * c) )
         scalar lemda = lemda + w * gama
         j++
     endloop
